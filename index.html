@@ -85,6 +85,8 @@
         let landmarks = [];
         let userLat = 0, userLng = 0;
         let orientationEnabled = false;
+        let cameraDistance = 2.0; // Start closer to Earth
+        let pinchStartDistance = 0;
         
         // Landmark data
         const landmarkData = [
@@ -107,7 +109,7 @@
                 0.1,
                 1000
             );
-            camera.position.z = 3;
+            camera.position.z = cameraDistance;
             
             // Create renderer
             renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -126,6 +128,9 @@
             
             // Setup device orientation
             setupOrientation();
+            
+            // Setup touch controls for pinch zoom
+            setupTouchControls();
             
             // Handle window resize
             window.addEventListener('resize', onWindowResize);
@@ -538,6 +543,11 @@
             const angle = Math.atan2(userVector.x, userVector.z);
             earthMesh.rotation.y = -angle;
             continentsGroup.rotation.y = -angle;
+            
+            // Store initial orientation for reference
+            if (!window.initialEarthRotation) {
+                window.initialEarthRotation = -angle;
+            }
         }
         
         function setupOrientation() {
@@ -600,31 +610,38 @@
                 // Update orientation display
                 updateOrientation(`α: ${alpha.toFixed(0)}° β: ${beta.toFixed(0)}° γ: ${gamma.toFixed(0)}°`);
                 
-                // Apply rotations to camera instead of Earth
-                // This creates the effect of looking through Earth
-                const alphaRad = alpha * Math.PI / 180;
-                const betaRad = beta * Math.PI / 180;
+                // Convert device orientation to radians
+                const alphaRad = (alpha) * Math.PI / 180;
+                const betaRad = (beta - 90) * Math.PI / 180; // Adjust for phone held upright
                 const gammaRad = gamma * Math.PI / 180;
                 
-                // Reset camera position and apply new orientation
-                camera.position.set(
-                    3 * Math.sin(alphaRad) * Math.cos(betaRad),
-                    3 * Math.sin(betaRad),
-                    3 * Math.cos(alphaRad) * Math.cos(betaRad)
-                );
+                // Calculate camera position based on device orientation
+                // The camera orbits around Earth while keeping user's location fixed
+                const radius = cameraDistance;
                 
+                // Spherical coordinates with device orientation
+                const x = radius * Math.sin(betaRad) * Math.sin(alphaRad);
+                const y = radius * Math.cos(betaRad);
+                const z = radius * Math.sin(betaRad) * Math.cos(alphaRad);
+                
+                // Set camera position
+                camera.position.set(x, y, z);
+                
+                // Always look at Earth center
                 camera.lookAt(0, 0, 0);
+                
+                // Adjust camera up vector based on device roll
+                const up = new THREE.Vector3(
+                    Math.sin(gammaRad * 0.01),
+                    1,
+                    0
+                );
+                camera.up.copy(up.normalize());
             }
         }
         
         function animate() {
             requestAnimationFrame(animate);
-            
-            // Slowly rotate Earth if orientation is not active
-            if (!orientationEnabled) {
-                earthMesh.rotation.y += 0.002;
-                continentsGroup.rotation.y += 0.002;
-            }
             
             // Update landmark labels
             updateLandmarkLabels();
@@ -648,6 +665,74 @@
         
         function updateOrientation(text) {
             document.getElementById('orientation').textContent = text;
+        }
+        
+        function setupTouchControls() {
+            let touches = [];
+            
+            renderer.domElement.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                touches = e.touches;
+                
+                if (touches.length === 2) {
+                    // Calculate initial pinch distance
+                    const dx = touches[0].clientX - touches[1].clientX;
+                    const dy = touches[0].clientY - touches[1].clientY;
+                    pinchStartDistance = Math.sqrt(dx * dx + dy * dy);
+                }
+            });
+            
+            renderer.domElement.addEventListener('touchmove', (e) => {
+                e.preventDefault();
+                touches = e.touches;
+                
+                if (touches.length === 2 && pinchStartDistance > 0) {
+                    // Calculate current pinch distance
+                    const dx = touches[0].clientX - touches[1].clientX;
+                    const dy = touches[0].clientY - touches[1].clientY;
+                    const currentDistance = Math.sqrt(dx * dx + dy * dy);
+                    
+                    // Calculate zoom factor
+                    const zoomFactor = currentDistance / pinchStartDistance;
+                    
+                    // Update camera distance
+                    cameraDistance = Math.max(1.2, Math.min(5.0, cameraDistance / zoomFactor));
+                    
+                    // Update camera position if orientation is enabled
+                    if (orientationEnabled) {
+                        const currentPos = camera.position.clone().normalize();
+                        camera.position.copy(currentPos.multiplyScalar(cameraDistance));
+                    } else {
+                        camera.position.z = cameraDistance;
+                    }
+                    
+                    // Reset pinch distance for next frame
+                    pinchStartDistance = currentDistance;
+                }
+            });
+            
+            renderer.domElement.addEventListener('touchend', (e) => {
+                e.preventDefault();
+                touches = e.touches;
+                
+                if (touches.length < 2) {
+                    pinchStartDistance = 0;
+                }
+            });
+            
+            // Mouse wheel zoom for desktop testing
+            renderer.domElement.addEventListener('wheel', (e) => {
+                e.preventDefault();
+                const zoomSpeed = 0.001;
+                cameraDistance = Math.max(1.2, Math.min(5.0, cameraDistance + e.deltaY * zoomSpeed));
+                
+                if (orientationEnabled) {
+                    const currentPos = camera.position.clone().normalize();
+                    camera.position.copy(currentPos.multiplyScalar(cameraDistance));
+                } else {
+                    camera.position.z = cameraDistance;
+                }
+            });
         }
         
         // Initialize when page loads
