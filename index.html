@@ -70,6 +70,10 @@
             <div id="status">Initializing...</div>
             <div id="location"></div>
             <div id="orientation"></div>
+            <div style="margin-top: 10px; font-size: 11px;">
+                <span style="color: #ff6666;">●</span> Near side
+                <span style="color: #6666ff; margin-left: 10px;">●</span> Far side (through Earth)
+            </div>
         </div>
         <button id="permission-button">Enable Device Orientation</button>
     </div>
@@ -77,7 +81,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script>
         let scene, camera, renderer;
-        let earth, earthMesh;
+        let earth, earthMesh, continentsGroup;
         let landmarks = [];
         let userLat = 0, userLng = 0;
         let orientationEnabled = false;
@@ -133,27 +137,246 @@
         }
         
         function createEarth() {
+            // Create transparent blue sphere
             const geometry = new THREE.SphereGeometry(1, 64, 64);
             const material = new THREE.MeshBasicMaterial({
                 color: 0x0066cc,
                 transparent: true,
-                opacity: 0.3,
+                opacity: 0.2,
                 side: THREE.DoubleSide
             });
             
             earthMesh = new THREE.Mesh(geometry, material);
             scene.add(earthMesh);
             
-            // Add wireframe for better visibility
-            const wireframeGeometry = new THREE.SphereGeometry(1.01, 32, 32);
-            const wireframeMaterial = new THREE.MeshBasicMaterial({
+            // Create detailed continents using canvas
+            createDetailedContinents();
+            
+            // Add a subtle grid for better spatial reference
+            const gridGeometry = new THREE.SphereGeometry(1.02, 36, 18);
+            const gridMaterial = new THREE.MeshBasicMaterial({
                 color: 0x003366,
                 wireframe: true,
                 transparent: true,
-                opacity: 0.1
+                opacity: 0.05
             });
-            const wireframe = new THREE.Mesh(wireframeGeometry, wireframeMaterial);
-            scene.add(wireframe);
+            const grid = new THREE.Mesh(gridGeometry, gridMaterial);
+            scene.add(grid);
+        }
+        
+        function createDetailedContinents() {
+            // Create a canvas to draw continent texture
+            const canvas = document.createElement('canvas');
+            canvas.width = 2048;
+            canvas.height = 1024;
+            const context = canvas.getContext('2d');
+            
+            // Fill with transparent background
+            context.fillStyle = 'rgba(0, 0, 0, 0)';
+            context.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw continents
+            context.fillStyle = 'rgba(0, 255, 100, 0.6)';
+            context.strokeStyle = 'rgba(0, 255, 100, 0.8)';
+            context.lineWidth = 2;
+            
+            // Convert lat/lng to canvas coordinates
+            function latLngToCanvas(lat, lng) {
+                const x = (lng + 180) / 360 * canvas.width;
+                const y = (90 - lat) / 180 * canvas.height;
+                return { x, y };
+            }
+            
+            // Detailed continent data with more points
+            const detailedContinents = [
+                // North America
+                {
+                    points: [
+                        [71, -168], [71, -155], [70, -145], [69, -130], [60, -130], [55, -129],
+                        [49, -123], [42, -124], [32, -117], [25, -110], [20, -105], [15, -94],
+                        [20, -97], [25, -97], [28, -95], [30, -93], [29, -89], [30, -84],
+                        [30, -81], [35, -75], [40, -73], [41, -70], [45, -67], [47, -60],
+                        [47, -52], [52, -55], [60, -64], [65, -65], [71, -80], [71, -168]
+                    ]
+                },
+                // South America
+                {
+                    points: [
+                        [12, -81], [10, -75], [8, -77], [7, -78], [5, -78], [2, -80],
+                        [1, -80], [-1, -80], [-3, -81], [-5, -81], [-6, -79], [-10, -75],
+                        [-15, -70], [-18, -70], [-23, -70], [-30, -71], [-33, -71], [-38, -73],
+                        [-41, -72], [-45, -74], [-48, -74], [-52, -73], [-55, -72], [-55, -68],
+                        [-52, -68], [-50, -69], [-47, -66], [-43, -65], [-38, -58], [-34, -58],
+                        [-30, -57], [-25, -55], [-23, -48], [-23, -43], [-20, -40], [-15, -38],
+                        [-10, -37], [-7, -35], [-5, -35], [0, -50], [5, -52], [8, -60],
+                        [10, -65], [10, -70], [9, -72], [8, -75], [9, -78], [10, -79], [12, -81]
+                    ]
+                },
+                // Europe
+                {
+                    points: [
+                        [71, 27], [70, 30], [69, 35], [66, 40], [60, 50], [55, 55],
+                        [60, 60], [66, 66], [71, 60], [71, 40], [70, 25], [68, 20],
+                        [66, 13], [64, 10], [62, 5], [58, 5], [56, 3], [54, 0],
+                        [51, -5], [48, -5], [46, -5], [43, -10], [36, -6], [36, -9],
+                        [37, -8], [38, -9], [40, -10], [43, -10], [45, -1], [46, 2],
+                        [48, 3], [50, 3], [52, 5], [54, 8], [56, 10], [58, 8],
+                        [60, 10], [62, 15], [64, 20], [66, 23], [68, 25], [71, 27]
+                    ]
+                },
+                // Africa
+                {
+                    points: [
+                        [37, 10], [35, 15], [33, 13], [32, 20], [32, 25], [31, 30],
+                        [31, 32], [30, 35], [27, 37], [20, 38], [15, 39], [12, 43],
+                        [11, 45], [11, 51], [8, 48], [5, 42], [0, 42], [-1, 41],
+                        [-5, 40], [-10, 40], [-15, 37], [-20, 35], [-26, 33], [-30, 30],
+                        [-34, 26], [-34, 20], [-34, 18], [-32, 18], [-30, 17], [-28, 16],
+                        [-25, 15], [-20, 15], [-17, 12], [-15, 12], [-12, 13], [-10, 13],
+                        [-8, 13], [-5, 10], [-4, 5], [0, 0], [4, -5], [4, -7],
+                        [6, -10], [8, -13], [10, -13], [12, -15], [15, -17], [20, -17],
+                        [27, -13], [30, -10], [32, -5], [35, 0], [37, 10]
+                    ]
+                },
+                // Asia
+                {
+                    points: [
+                        [71, 27], [71, 180], [66, 180], [65, -170], [64, -175], [60, -170],
+                        [55, -160], [52, -158], [50, -155], [55, -160], [60, -165], [65, -168],
+                        [66, 180], [62, 170], [55, 160], [50, 155], [45, 150], [40, 140],
+                        [45, 135], [50, 130], [53, 125], [55, 120], [50, 115], [45, 110],
+                        [40, 105], [35, 100], [30, 95], [25, 90], [20, 85], [15, 80],
+                        [10, 75], [8, 77], [7, 80], [10, 80], [15, 82], [20, 88],
+                        [25, 92], [30, 90], [35, 85], [40, 80], [45, 75], [50, 70],
+                        [55, 65], [60, 60], [66, 66], [71, 60], [71, 27]
+                    ]
+                },
+                // Australia & Oceania
+                {
+                    points: [
+                        [-10, 142], [-10, 145], [-12, 145], [-15, 145], [-18, 146], [-20, 147],
+                        [-22, 150], [-25, 153], [-28, 153], [-32, 152], [-35, 150], [-38, 147],
+                        [-38, 145], [-38, 140], [-37, 136], [-35, 135], [-34, 132], [-32, 130],
+                        [-30, 125], [-28, 122], [-26, 120], [-24, 117], [-22, 115], [-20, 115],
+                        [-18, 122], [-16, 125], [-14, 128], [-12, 130], [-11, 132], [-10, 135],
+                        [-10, 138], [-10, 142]
+                    ]
+                }
+            ];
+            
+            // Draw each continent
+            detailedContinents.forEach(continent => {
+                context.beginPath();
+                let first = true;
+                continent.points.forEach(([lat, lng]) => {
+                    const { x, y } = latLngToCanvas(lat, lng);
+                    if (first) {
+                        context.moveTo(x, y);
+                        first = false;
+                    } else {
+                        context.lineTo(x, y);
+                    }
+                });
+                context.closePath();
+                context.fill();
+                context.stroke();
+            });
+            
+            // Create texture from canvas
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.needsUpdate = true;
+            
+            // Create continent mesh
+            const continentGeometry = new THREE.SphereGeometry(1.01, 128, 128);
+            const continentMaterial = new THREE.MeshBasicMaterial({
+                map: texture,
+                transparent: true,
+                opacity: 0.7,
+                side: THREE.DoubleSide
+            });
+            
+            continentsGroup = new THREE.Mesh(continentGeometry, continentMaterial);
+            scene.add(continentsGroup);
+        }
+        
+        function createSimpleContinents() {
+            // Only create simple continents if not already created
+            if (!continentsGroup) {
+                continentsGroup = new THREE.Group();
+            }
+            
+            // Simplified continent outlines as line segments
+            const continentData = [
+                // North America
+                [
+                    { lat: 71, lng: -168 }, { lat: 71, lng: -130 }, { lat: 49, lng: -123 },
+                    { lat: 32, lng: -117 }, { lat: 25, lng: -97 }, { lat: 30, lng: -81 },
+                    { lat: 45, lng: -67 }, { lat: 47, lng: -52 }, { lat: 60, lng: -64 },
+                    { lat: 71, lng: -168 }
+                ],
+                // South America
+                [
+                    { lat: 12, lng: -81 }, { lat: 10, lng: -75 }, { lat: 5, lng: -52 },
+                    { lat: -5, lng: -35 }, { lat: -23, lng: -40 }, { lat: -34, lng: -58 },
+                    { lat: -55, lng: -68 }, { lat: -55, lng: -72 }, { lat: -33, lng: -71 },
+                    { lat: -18, lng: -70 }, { lat: -5, lng: -78 }, { lat: 1, lng: -80 },
+                    { lat: 12, lng: -81 }
+                ],
+                // Europe & Asia
+                [
+                    { lat: 71, lng: 27 }, { lat: 66, lng: 13 }, { lat: 58, lng: 5 },
+                    { lat: 51, lng: -5 }, { lat: 43, lng: -10 }, { lat: 36, lng: -6 },
+                    { lat: 36, lng: 3 }, { lat: 40, lng: 18 }, { lat: 38, lng: 22 },
+                    { lat: 41, lng: 28 }, { lat: 44, lng: 40 }, { lat: 66, lng: 66 },
+                    { lat: 71, lng: 180 }, { lat: 66, lng: 180 }, { lat: 55, lng: 140 },
+                    { lat: 45, lng: 135 }, { lat: 35, lng: 140 }, { lat: 35, lng: 128 },
+                    { lat: 23, lng: 120 }, { lat: 22, lng: 110 }, { lat: 10, lng: 105 },
+                    { lat: 1, lng: 103 }, { lat: -10, lng: 115 }, { lat: -8, lng: 125 },
+                    { lat: -10, lng: 142 }, { lat: -20, lng: 145 }, { lat: -38, lng: 145 },
+                    { lat: -43, lng: 147 }, { lat: -39, lng: 144 }, { lat: -28, lng: 153 },
+                    { lat: -10, lng: 142 }, { lat: 5, lng: 97 }, { lat: 20, lng: 92 },
+                    { lat: 28, lng: 70 }, { lat: 24, lng: 63 }, { lat: 12, lng: 43 },
+                    { lat: 15, lng: 39 }, { lat: 30, lng: 32 }, { lat: 31, lng: 35 },
+                    { lat: 36, lng: 36 }, { lat: 71, lng: 27 }
+                ],
+                // Africa
+                [
+                    { lat: 37, lng: 10 }, { lat: 33, lng: 13 }, { lat: 32, lng: 25 },
+                    { lat: 31, lng: 32 }, { lat: 15, lng: 39 }, { lat: 12, lng: 43 },
+                    { lat: 11, lng: 51 }, { lat: -1, lng: 41 }, { lat: -10, lng: 40 },
+                    { lat: -26, lng: 33 }, { lat: -34, lng: 18 }, { lat: -34, lng: 26 },
+                    { lat: -29, lng: 32 }, { lat: -15, lng: 28 }, { lat: -8, lng: 13 },
+                    { lat: 5, lng: 9 }, { lat: 4, lng: -7 }, { lat: 10, lng: -13 },
+                    { lat: 15, lng: -17 }, { lat: 27, lng: -13 }, { lat: 37, lng: 10 }
+                ],
+                // Australia
+                [
+                    { lat: -10, lng: 142 }, { lat: -11, lng: 132 }, { lat: -14, lng: 125 },
+                    { lat: -20, lng: 115 }, { lat: -26, lng: 113 }, { lat: -34, lng: 115 },
+                    { lat: -38, lng: 140 }, { lat: -38, lng: 145 }, { lat: -43, lng: 147 },
+                    { lat: -39, lng: 144 }, { lat: -28, lng: 153 }, { lat: -10, lng: 142 }
+                ]
+            ];
+            
+            // Create lines for each continent
+            continentData.forEach(continent => {
+                const points = [];
+                continent.forEach(coord => {
+                    points.push(latLngToVector3(coord.lat, coord.lng, 1.02));
+                });
+                
+                const lineGeometry = new THREE.BufferGeometry().setFromPoints(points);
+                const lineMaterial = new THREE.LineBasicMaterial({
+                    color: 0x00ff00,
+                    transparent: true,
+                    opacity: 0.6,
+                    linewidth: 2
+                });
+                const line = new THREE.Line(lineGeometry, lineMaterial);
+                continentsGroup.add(line);
+            });
+            
+            scene.add(continentsGroup);
         }
         
         function latLngToVector3(lat, lng, radius = 1) {
@@ -169,19 +392,35 @@
         
         function addLandmarks() {
             landmarkData.forEach(landmark => {
-                // Create landmark dot
+                // Create landmark group
+                const group = new THREE.Group();
+                
+                // Create main landmark dot
                 const geometry = new THREE.SphereGeometry(0.02, 16, 16);
                 const material = new THREE.MeshBasicMaterial({
                     color: 0xff0000,
-                    emissive: 0xff0000
+                    transparent: true,
+                    opacity: 1.0
                 });
                 const mesh = new THREE.Mesh(geometry, material);
+                
+                // Create outer glow for visibility
+                const glowGeometry = new THREE.SphereGeometry(0.025, 16, 16);
+                const glowMaterial = new THREE.MeshBasicMaterial({
+                    color: 0xff6666,
+                    transparent: true,
+                    opacity: 0.3
+                });
+                const glowMesh = new THREE.Mesh(glowGeometry, glowMaterial);
                 
                 // Position on Earth surface
                 const position = latLngToVector3(landmark.lat, landmark.lng, 1.05);
                 mesh.position.copy(position);
+                glowMesh.position.copy(position);
                 
-                scene.add(mesh);
+                group.add(mesh);
+                group.add(glowMesh);
+                scene.add(group);
                 
                 // Create label
                 const label = document.createElement('div');
@@ -192,23 +431,61 @@
                 
                 landmarks.push({
                     mesh: mesh,
+                    glowMesh: glowMesh,
+                    group: group,
                     label: label,
                     data: landmark,
-                    position: position
+                    position: position,
+                    material: material,
+                    glowMaterial: glowMaterial
                 });
             });
         }
         
         function updateLandmarkLabels() {
             landmarks.forEach(landmark => {
-                // Convert 3D position to 2D screen position
-                const vector = landmark.position.clone();
-                vector.applyMatrix4(earthMesh.matrixWorld);
+                // Get world position of landmark
+                const worldPos = landmark.position.clone();
+                worldPos.applyMatrix4(earthMesh.matrixWorld);
+                
+                // Calculate if landmark is on near or far side
+                const cameraDir = new THREE.Vector3();
+                camera.getWorldDirection(cameraDir);
+                
+                const landmarkDir = worldPos.clone().normalize();
+                const dotProduct = cameraDir.dot(landmarkDir);
+                
+                // Positive dot product means landmark is on far side (through Earth)
+                const isOnFarSide = dotProduct > 0;
+                
+                // Convert to screen position
+                const vector = worldPos.clone();
                 vector.project(camera);
                 
-                // Check if landmark is visible (in front of camera)
-                const distance = camera.position.distanceTo(landmark.mesh.position);
+                // Check if landmark is visible
                 const isVisible = vector.z < 1 && vector.z > -1;
+                
+                // Update landmark appearance based on side
+                if (isOnFarSide) {
+                    // Far side - make dimmer and bluish
+                    landmark.material.color.setHex(0x6666ff);
+                    landmark.material.opacity = 0.4;
+                    landmark.glowMaterial.color.setHex(0x6666ff);
+                    landmark.glowMaterial.opacity = 0.15;
+                    
+                    // Scale down slightly for depth cue
+                    landmark.mesh.scale.setScalar(0.8);
+                    landmark.glowMesh.scale.setScalar(0.8);
+                } else {
+                    // Near side - bright red and full size
+                    landmark.material.color.setHex(0xff0000);
+                    landmark.material.opacity = 1.0;
+                    landmark.glowMaterial.color.setHex(0xff6666);
+                    landmark.glowMaterial.opacity = 0.5;
+                    
+                    landmark.mesh.scale.setScalar(1.0);
+                    landmark.glowMesh.scale.setScalar(1.0);
+                }
                 
                 if (isVisible) {
                     const x = (vector.x * 0.5 + 0.5) * window.innerWidth;
@@ -217,6 +494,17 @@
                     landmark.label.style.left = x + 'px';
                     landmark.label.style.top = y + 'px';
                     landmark.label.style.display = 'block';
+                    
+                    // Update label styling based on side
+                    if (isOnFarSide) {
+                        landmark.label.style.opacity = '0.6';
+                        landmark.label.style.backgroundColor = 'rgba(0, 0, 100, 0.7)';
+                        landmark.label.innerHTML = landmark.data.name + ' <span style="font-size: 10px;">↓</span>';
+                    } else {
+                        landmark.label.style.opacity = '1.0';
+                        landmark.label.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
+                        landmark.label.innerHTML = landmark.data.name;
+                    }
                 } else {
                     landmark.label.style.display = 'none';
                 }
@@ -249,6 +537,7 @@
             const userVector = latLngToVector3(userLat, userLng);
             const angle = Math.atan2(userVector.x, userVector.z);
             earthMesh.rotation.y = -angle;
+            continentsGroup.rotation.y = -angle;
         }
         
         function setupOrientation() {
@@ -334,6 +623,7 @@
             // Slowly rotate Earth if orientation is not active
             if (!orientationEnabled) {
                 earthMesh.rotation.y += 0.002;
+                continentsGroup.rotation.y += 0.002;
             }
             
             // Update landmark labels
