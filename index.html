@@ -87,6 +87,7 @@
         let orientationEnabled = false;
         let cameraDistance = 2.0; // Start closer to Earth
         let pinchStartDistance = 0;
+        let userLocationMarker;
         
         // Landmark data
         const landmarkData = [
@@ -538,16 +539,43 @@
         }
         
         function orientEarthToUser() {
-            // Calculate rotation to put user location facing camera
-            const userVector = latLngToVector3(userLat, userLng);
-            const angle = Math.atan2(userVector.x, userVector.z);
-            earthMesh.rotation.y = -angle;
-            continentsGroup.rotation.y = -angle;
+            // Position camera at user's location looking outward
+            const userVector = latLngToVector3(userLat, userLng, cameraDistance);
+            camera.position.copy(userVector);
+            camera.lookAt(0, 0, 0);
             
-            // Store initial orientation for reference
-            if (!window.initialEarthRotation) {
-                window.initialEarthRotation = -angle;
+            // Set up vector based on user position
+            const up = userVector.clone().normalize();
+            camera.up.copy(up);
+            
+            // Add user location marker
+            if (!userLocationMarker) {
+                const markerGeometry = new THREE.SphereGeometry(0.03, 16, 16);
+                const markerMaterial = new THREE.MeshBasicMaterial({
+                    color: 0x00ff00,
+                    transparent: true,
+                    opacity: 0.8
+                });
+                userLocationMarker = new THREE.Mesh(markerGeometry, markerMaterial);
+                scene.add(userLocationMarker);
+                
+                // Add pulsing effect
+                const pulseGeometry = new THREE.SphereGeometry(0.04, 16, 16);
+                const pulseMaterial = new THREE.MeshBasicMaterial({
+                    color: 0x00ff00,
+                    transparent: true,
+                    opacity: 0.3
+                });
+                const pulseMesh = new THREE.Mesh(pulseGeometry, pulseMaterial);
+                userLocationMarker.add(pulseMesh);
             }
+            
+            // Position marker at user location
+            const markerPos = latLngToVector3(userLat, userLng, 1.05);
+            userLocationMarker.position.copy(markerPos);
+            
+            // Earth stays in its default orientation - we don't rotate it!
+            // User's position is fixed on the sphere
         }
         
         function setupOrientation() {
@@ -610,33 +638,43 @@
                 // Update orientation display
                 updateOrientation(`α: ${alpha.toFixed(0)}° β: ${beta.toFixed(0)}° γ: ${gamma.toFixed(0)}°`);
                 
-                // Convert device orientation to radians
-                const alphaRad = (alpha) * Math.PI / 180;
-                const betaRad = (beta - 90) * Math.PI / 180; // Adjust for phone held upright
-                const gammaRad = gamma * Math.PI / 180;
+                // Get user's position on Earth
+                const userVector = latLngToVector3(userLat, userLng, 1).normalize();
                 
-                // Calculate camera position based on device orientation
-                // The camera orbits around Earth while keeping user's location fixed
-                const radius = cameraDistance;
+                // Convert device orientation to look direction
+                // Alpha: compass heading (0 = North, 90 = East, 180 = South, 270 = West)
+                // Beta: tilt angle (0 = looking up, 90 = horizontal, 180 = looking down)
+                const heading = (360 - alpha) * Math.PI / 180; // Invert for correct direction
+                const pitch = (90 - beta) * Math.PI / 180;
                 
-                // Spherical coordinates with device orientation
-                const x = radius * Math.sin(betaRad) * Math.sin(alphaRad);
-                const y = radius * Math.cos(betaRad);
-                const z = radius * Math.sin(betaRad) * Math.cos(alphaRad);
+                // Calculate the direction vector from user's position
+                // This represents where the user is pointing their phone
+                const north = new THREE.Vector3(0, 1, 0);
+                const east = new THREE.Vector3().crossVectors(north, userVector).normalize();
+                const userNorth = new THREE.Vector3().crossVectors(east, userVector).normalize();
                 
-                // Set camera position
-                camera.position.set(x, y, z);
+                // Create rotation matrix for compass heading
+                const rotationMatrix = new THREE.Matrix4().makeRotationAxis(userVector, heading);
                 
-                // Always look at Earth center
+                // Apply heading to north vector
+                const lookDirection = userNorth.clone();
+                lookDirection.applyMatrix4(rotationMatrix);
+                
+                // Apply pitch rotation
+                const pitchAxis = new THREE.Vector3().crossVectors(userVector, lookDirection).normalize();
+                lookDirection.applyAxisAngle(pitchAxis, pitch);
+                
+                // Calculate camera position
+                // Camera should be on opposite side of where we're looking
+                const cameraPos = lookDirection.multiplyScalar(-cameraDistance);
+                camera.position.copy(cameraPos);
+                
+                // Look at Earth center
                 camera.lookAt(0, 0, 0);
                 
-                // Adjust camera up vector based on device roll
-                const up = new THREE.Vector3(
-                    Math.sin(gammaRad * 0.01),
-                    1,
-                    0
-                );
-                camera.up.copy(up.normalize());
+                // Set up vector perpendicular to view direction
+                const up = userVector.clone();
+                camera.up.copy(up);
             }
         }
         
