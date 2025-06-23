@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>X-ray Earth</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+            background: #000;
+            color: white;
+        }
+        
+        #container {
+            width: 100vw;
+            height: 100vh;
+            position: relative;
+        }
+        
+        #info {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 10px;
+            border-radius: 5px;
+            font-size: 12px;
+            max-width: 300px;
+        }
+        
+        #permission-button {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            padding: 15px 30px;
+            font-size: 18px;
+            background: #0066cc;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            display: none;
+        }
+        
+        #permission-button:hover {
+            background: #0052a3;
+        }
+        
+        .landmark-label {
+            position: absolute;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 12px;
+            pointer-events: none;
+            white-space: nowrap;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <div id="info">
+            <h3>X-ray Earth</h3>
+            <p>Move your phone to see through the Earth!</p>
+            <div id="status">Initializing...</div>
+            <div id="location"></div>
+            <div id="orientation"></div>
+        </div>
+        <button id="permission-button">Enable Device Orientation</button>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        let scene, camera, renderer;
+        let earth, earthMesh;
+        let landmarks = [];
+        let userLat = 0, userLng = 0;
+        let orientationEnabled = false;
+        
+        // Landmark data
+        const landmarkData = [
+            { name: "New York", lat: 40.7128, lng: -74.0060 },
+            { name: "London", lat: 51.5074, lng: -0.1278 },
+            { name: "Tokyo", lat: 35.6762, lng: 139.6503 },
+            { name: "Sydney", lat: -33.8688, lng: 151.2093 },
+            { name: "Rio de Janeiro", lat: -22.9068, lng: -43.1729 },
+            { name: "Dubai", lat: 25.2048, lng: 55.2708 }
+        ];
+        
+        function init() {
+            // Create scene
+            scene = new THREE.Scene();
+            
+            // Create camera
+            camera = new THREE.PerspectiveCamera(
+                75,
+                window.innerWidth / window.innerHeight,
+                0.1,
+                1000
+            );
+            camera.position.z = 3;
+            
+            // Create renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            document.getElementById('container').appendChild(renderer.domElement);
+            
+            // Create Earth
+            createEarth();
+            
+            // Add landmarks
+            addLandmarks();
+            
+            // Get user location
+            getUserLocation();
+            
+            // Setup device orientation
+            setupOrientation();
+            
+            // Handle window resize
+            window.addEventListener('resize', onWindowResize);
+            
+            // Start animation loop
+            animate();
+            
+            updateStatus('Ready! Move your device to explore.');
+        }
+        
+        function createEarth() {
+            const geometry = new THREE.SphereGeometry(1, 64, 64);
+            const material = new THREE.MeshBasicMaterial({
+                color: 0x0066cc,
+                transparent: true,
+                opacity: 0.3,
+                side: THREE.DoubleSide
+            });
+            
+            earthMesh = new THREE.Mesh(geometry, material);
+            scene.add(earthMesh);
+            
+            // Add wireframe for better visibility
+            const wireframeGeometry = new THREE.SphereGeometry(1.01, 32, 32);
+            const wireframeMaterial = new THREE.MeshBasicMaterial({
+                color: 0x003366,
+                wireframe: true,
+                transparent: true,
+                opacity: 0.1
+            });
+            const wireframe = new THREE.Mesh(wireframeGeometry, wireframeMaterial);
+            scene.add(wireframe);
+        }
+        
+        function latLngToVector3(lat, lng, radius = 1) {
+            const phi = (90 - lat) * Math.PI / 180;
+            const theta = (lng + 180) * Math.PI / 180;
+            
+            const x = -(radius * Math.sin(phi) * Math.cos(theta));
+            const y = radius * Math.cos(phi);
+            const z = radius * Math.sin(phi) * Math.sin(theta);
+            
+            return new THREE.Vector3(x, y, z);
+        }
+        
+        function addLandmarks() {
+            landmarkData.forEach(landmark => {
+                // Create landmark dot
+                const geometry = new THREE.SphereGeometry(0.02, 16, 16);
+                const material = new THREE.MeshBasicMaterial({
+                    color: 0xff0000,
+                    emissive: 0xff0000
+                });
+                const mesh = new THREE.Mesh(geometry, material);
+                
+                // Position on Earth surface
+                const position = latLngToVector3(landmark.lat, landmark.lng, 1.05);
+                mesh.position.copy(position);
+                
+                scene.add(mesh);
+                
+                // Create label
+                const label = document.createElement('div');
+                label.className = 'landmark-label';
+                label.textContent = landmark.name;
+                label.style.display = 'none';
+                document.getElementById('container').appendChild(label);
+                
+                landmarks.push({
+                    mesh: mesh,
+                    label: label,
+                    data: landmark,
+                    position: position
+                });
+            });
+        }
+        
+        function updateLandmarkLabels() {
+            landmarks.forEach(landmark => {
+                // Convert 3D position to 2D screen position
+                const vector = landmark.position.clone();
+                vector.applyMatrix4(earthMesh.matrixWorld);
+                vector.project(camera);
+                
+                // Check if landmark is visible (in front of camera)
+                const distance = camera.position.distanceTo(landmark.mesh.position);
+                const isVisible = vector.z < 1 && vector.z > -1;
+                
+                if (isVisible) {
+                    const x = (vector.x * 0.5 + 0.5) * window.innerWidth;
+                    const y = (-vector.y * 0.5 + 0.5) * window.innerHeight;
+                    
+                    landmark.label.style.left = x + 'px';
+                    landmark.label.style.top = y + 'px';
+                    landmark.label.style.display = 'block';
+                } else {
+                    landmark.label.style.display = 'none';
+                }
+            });
+        }
+        
+        function getUserLocation() {
+            if ('geolocation' in navigator) {
+                navigator.geolocation.getCurrentPosition(
+                    position => {
+                        userLat = position.coords.latitude;
+                        userLng = position.coords.longitude;
+                        updateLocation(`Location: ${userLat.toFixed(2)}°, ${userLng.toFixed(2)}°`);
+                        
+                        // Orient Earth so user location faces camera
+                        orientEarthToUser();
+                    },
+                    error => {
+                        updateLocation('Location unavailable (using default)');
+                        console.log('Geolocation error:', error);
+                    }
+                );
+            } else {
+                updateLocation('Geolocation not supported');
+            }
+        }
+        
+        function orientEarthToUser() {
+            // Calculate rotation to put user location facing camera
+            const userVector = latLngToVector3(userLat, userLng);
+            const angle = Math.atan2(userVector.x, userVector.z);
+            earthMesh.rotation.y = -angle;
+        }
+        
+        function setupOrientation() {
+            // Check if we need permission (iOS 13+)
+            if (typeof DeviceOrientationEvent !== 'undefined' && 
+                typeof DeviceOrientationEvent.requestPermission === 'function') {
+                
+                // Show permission button for iOS
+                const button = document.getElementById('permission-button');
+                button.style.display = 'block';
+                button.addEventListener('click', requestOrientationPermission);
+                
+            } else if ('DeviceOrientationEvent' in window) {
+                // Other browsers - just start listening
+                startOrientationTracking();
+            } else {
+                updateStatus('Device orientation not supported');
+            }
+        }
+        
+        function requestOrientationPermission() {
+            // iOS 13+ requires user interaction and HTTPS
+            if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost') {
+                alert('Device orientation requires HTTPS. Please use the HTTPS server or deploy to a secure host.');
+                updateStatus('HTTPS required for device orientation');
+                return;
+            }
+            
+            DeviceOrientationEvent.requestPermission()
+                .then(response => {
+                    if (response == 'granted') {
+                        document.getElementById('permission-button').style.display = 'none';
+                        startOrientationTracking();
+                    } else {
+                        updateStatus('Permission denied for device orientation');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error requesting permission:', error);
+                    updateStatus('Error: ' + error.message);
+                    // Try starting anyway in case it's a false error
+                    startOrientationTracking();
+                });
+        }
+        
+        function startOrientationTracking() {
+            orientationEnabled = true;
+            window.addEventListener('deviceorientation', handleOrientation);
+            updateStatus('Device orientation enabled!');
+        }
+        
+        function handleOrientation(event) {
+            if (!orientationEnabled) return;
+            
+            const alpha = event.alpha; // Z axis - compass direction
+            const beta = event.beta;   // X axis - front/back tilt
+            const gamma = event.gamma; // Y axis - left/right tilt
+            
+            if (alpha !== null && beta !== null && gamma !== null) {
+                // Update orientation display
+                updateOrientation(`α: ${alpha.toFixed(0)}° β: ${beta.toFixed(0)}° γ: ${gamma.toFixed(0)}°`);
+                
+                // Apply rotations to camera instead of Earth
+                // This creates the effect of looking through Earth
+                const alphaRad = alpha * Math.PI / 180;
+                const betaRad = beta * Math.PI / 180;
+                const gammaRad = gamma * Math.PI / 180;
+                
+                // Reset camera position and apply new orientation
+                camera.position.set(
+                    3 * Math.sin(alphaRad) * Math.cos(betaRad),
+                    3 * Math.sin(betaRad),
+                    3 * Math.cos(alphaRad) * Math.cos(betaRad)
+                );
+                
+                camera.lookAt(0, 0, 0);
+            }
+        }
+        
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            // Slowly rotate Earth if orientation is not active
+            if (!orientationEnabled) {
+                earthMesh.rotation.y += 0.002;
+            }
+            
+            // Update landmark labels
+            updateLandmarkLabels();
+            
+            renderer.render(scene, camera);
+        }
+        
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+        
+        function updateStatus(text) {
+            document.getElementById('status').textContent = text;
+        }
+        
+        function updateLocation(text) {
+            document.getElementById('location').textContent = text;
+        }
+        
+        function updateOrientation(text) {
+            document.getElementById('orientation').textContent = text;
+        }
+        
+        // Initialize when page loads
+        window.addEventListener('load', init);
+    </script>
+</body>
+</html>
