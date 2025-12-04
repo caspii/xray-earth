@@ -69,11 +69,20 @@
 
 <!--
   ACTION REQUIRED: The content in this section represents placeholders.
-  Fill them out with the right edge cases.
+  Fill them out with the right edge cases. For mobile apps, consider:
+  - Permission denial scenarios
+  - Device sensor availability
+  - Low battery / thermal throttling
+  - Network unavailability (offline-first requirement)
+  - Device orientation lock
+  - Interrupted app lifecycle (background/foreground)
 -->
 
 - What happens when [boundary condition]?
 - How does system handle [error scenario]?
+- What happens when required permissions are denied?
+- How does feature behave on low-end devices?
+- What happens when app goes to background during operation?
 
 ## Requirements *(mandatory)*
 

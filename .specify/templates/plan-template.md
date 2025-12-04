@@ -31,7 +31,18 @@
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-[Gates determined based on constitution file]
+Verify compliance with constitution principles (.specify/memory/constitution.md):
+
+- [ ] **Native Performance First**: Will this feature maintain 60 FPS, <16ms sensor latency, <5% battery/10min, <150MB memory?
+- [ ] **Device Orientation as Primary Interface**: Does this feature use device movement as primary interaction (touch only for config/settings)?
+- [ ] **Cross-Platform Parity**: Will iOS and Android have identical UX and performance? Any platform-specific code justified?
+- [ ] **Offline-First Architecture**: Does this feature work fully offline without network dependencies?
+- [ ] **Minimal Dependencies**: Are new dependencies justified? Bundle size impact assessed? In-house alternative explored?
+- [ ] **Permission Transparency**: Are permission requests clear? Does app function gracefully when denied?
+- [ ] **Data Persistence with AsyncStorage**: Is AsyncStorage sufficient? No unnecessary database engines?
+- [ ] **Testing Requirements**: Plan includes manual testing on physical devices? Performance profiling?
+
+**Result**: ✅ PASS / ⚠️ NEEDS JUSTIFICATION / ❌ BLOCKS (see Complexity Tracking)
 
 ## Project Structure
 

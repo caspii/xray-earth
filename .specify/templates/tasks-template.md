@@ -157,6 +157,16 @@ Examples of foundational tasks (adjust based on your project):
 - [ ] TXXX Security hardening
 - [ ] TXXX Run quickstart.md validation
 
+**Mobile-Specific Tasks** (if applicable):
+- [ ] TXXX [P] FPS profiling on physical devices (iOS + Android)
+- [ ] TXXX [P] Memory profiling and leak detection
+- [ ] TXXX [P] Battery impact measurement (30-minute test)
+- [ ] TXXX [P] Cross-platform parity verification (iOS vs Android)
+- [ ] TXXX [P] Sensor latency measurement
+- [ ] TXXX [P] Permission denial scenario testing
+- [ ] TXXX [P] App lifecycle testing (background/foreground transitions)
+- [ ] TXXX [P] Low-end device testing (older iPhone/Android models)
+
 ---
 
 ## Dependencies & Execution Order
