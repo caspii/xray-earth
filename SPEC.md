@@ -237,37 +237,13 @@ function selectVisiblePOIs(allPOIs, userLocation, viewDirection, maxVisible = 15
 - **Label sizing**: Larger labels for higher-scored POIs
 - **Distance indicator**: Small text showing km from user
 
-#### 6. Landmark System
-- Display major world landmarks as visible points on Earth
-- Render landmarks as 3D spheres slightly outside Earth surface
-- Show landmark names as floating labels (Text sprites or native overlays)
-- Calculate great circle distances from user
-- Support for dynamic landmark loading
-- Efficient rendering for 50+ landmarks
-
-### Landmark Data Structure
-```typescript
-interface Landmark {
-  id: string;
-  name: string;
-  lat: number;
-  lng: number;
-  description?: string;
-  icon?: string;
-}
-```
-
-### Initial Landmark Set
-- New York City (40.7128, -74.0060)
-- London (51.5074, -0.1278)
-- Tokyo (35.6762, 139.6503)
-- Sydney (-33.8688, 151.2093)
-- Rio de Janeiro (-22.9068, -43.1729)
-- Dubai (25.2048, 55.2708)
-- Paris (48.8566, 2.3522)
-- Cairo (30.0444, 31.2357)
-- Mumbai (19.0760, 72.8777)
-- Mexico City (19.4326, -99.1332)
+#### 6. POI Rendering
+- Display cities and landmarks as visible points on Earth
+- Render POIs as 3D spheres slightly outside Earth surface
+- Show names as floating labels (Text sprites or native overlays)
+- Labels include distance from user in km
+- Efficient rendering for up to 15 visible POIs at once
+- Smooth fade transitions when POIs enter/exit visibility
 
 ## User Interface Requirements
 
