@@ -20,7 +20,6 @@ The application displays a semi-transparent 3D Earth globe rendered using Three.
 - **3D Rendering**: Three.js via `expo-gl` and `expo-three`
 - **Sensors**: `expo-sensors` for device orientation and motion
 - **Location**: `expo-location` for GPS positioning
-- **Local Storage**: `@react-native-async-storage/async-storage` for persisting user location preferences
 - **State Management**: React Context API / Zustand (optional)
 
 ### Required Expo Packages
@@ -32,8 +31,7 @@ The application displays a semi-transparent 3D Earth globe rendered using Three.
   "expo-sensors": "~13.0.0",
   "expo-location": "~17.0.0",
   "three": "^0.160.0",
-  "react-native": "0.73.0",
-  "@react-native-async-storage/async-storage": "^1.21.0"
+  "react-native": "0.73.0"
 }
 ```
 
@@ -43,7 +41,6 @@ The application displays a semi-transparent 3D Earth globe rendered using Three.
 - **Magnetometer**: Compass heading
 - **Location Services**: GPS coordinates
 - **OpenGL ES**: Via expo-gl for 3D rendering
-- **AsyncStorage**: Local key-value storage for persisting user preferences
 
 ## Functional Requirements
 
@@ -82,6 +79,7 @@ The application displays a semi-transparent 3D Earth globe rendered using Three.
 - Position Earth sphere relative to user's location
 - Handle permission denied gracefully (default to 0,0)
 - Support foreground location access only
+- **No manual input required** - the app works entirely through device orientation
 
 **Location Permission Flow**:
 ```javascript
@@ -93,184 +91,153 @@ if (status === 'granted') {
 }
 ```
 
-#### 4. City Selection and Manual Coordinate Entry
+#### 4. Built-in City & POI Database
 
-**Overview**: Users can set their viewing position by selecting from a list of the world's 100 most populated cities or by manually entering latitude/longitude coordinates. This position is stored locally and persists across app sessions.
+**Overview**: The app includes a pre-loaded database of 150 cities and points of interest. No user input is required - cities are automatically displayed based on the user's current view direction and location.
 
-**City Selection Features**:
-- Searchable list of 100 most populated cities worldwide
-- Fast fuzzy search/filter by city name
-- Display city name, country, and population
-- Alphabetically sorted with search ranking
-- Tap to select and set as current location
-- Visual confirmation when city is selected
+**Database Contents**:
+- **100 major world cities** (by population and global significance)
+- **50 notable points of interest** (landmarks, natural wonders, etc.)
 
-**Manual Coordinate Entry Features**:
-- Input fields for latitude (-90 to 90) and longitude (-180 to 180)
-- Real-time validation of coordinate ranges
-- Format support: Decimal degrees (e.g., 40.7128, -74.0060)
-- Clear error messaging for invalid inputs
-- "Set Location" button to confirm and apply coordinates
-
-**Local Storage Implementation**:
-- Use `@react-native-async-storage/async-storage` for persistence
-- Store selected city or manual coordinates
-- Store last updated timestamp
-- Load saved location on app startup
-- Fallback to GPS location if no saved position exists
-
-**Data Structure - City Database**:
+**Data Structure - City/POI Entry**:
 ```javascript
 {
-  id: "nyc",
-  name: "New York City",
-  country: "United States",
-  population: 8336817,
-  lat: 40.7128,
-  lng: -74.0060,
-  timezone: "America/New_York"
+  id: "tokyo",
+  name: "Tokyo",
+  country: "Japan",
+  type: "city",           // 'city' | 'landmark' | 'natural'
+  population: 37400068,   // null for non-cities
+  lat: 35.6762,
+  lng: 139.6503
 }
 ```
 
-**Storage Keys**:
+**Sample Database Entries**:
 ```javascript
-const STORAGE_KEYS = {
-  LOCATION_TYPE: '@xray_earth:location_type',    // 'gps' | 'city' | 'manual'
-  SELECTED_CITY: '@xray_earth:selected_city',    // City object
-  MANUAL_COORDS: '@xray_earth:manual_coords',    // { lat, lng }
-  LAST_UPDATED: '@xray_earth:last_updated'       // ISO timestamp
-};
-```
+export const WORLD_DATABASE = [
+  // Major cities
+  { id: "tokyo", name: "Tokyo", country: "Japan", type: "city", population: 37400068, lat: 35.6762, lng: 139.6503 },
+  { id: "delhi", name: "Delhi", country: "India", type: "city", population: 28514000, lat: 28.7041, lng: 77.1025 },
+  { id: "shanghai", name: "Shanghai", country: "China", type: "city", population: 25582000, lat: 31.2304, lng: 121.4737 },
+  { id: "sao_paulo", name: "São Paulo", country: "Brazil", type: "city", population: 21650000, lat: -23.5505, lng: -46.6333 },
+  { id: "mexico_city", name: "Mexico City", country: "Mexico", type: "city", population: 21581000, lat: 19.4326, lng: -99.1332 },
+  { id: "cairo", name: "Cairo", country: "Egypt", type: "city", population: 20076000, lat: 30.0444, lng: 31.2357 },
+  { id: "mumbai", name: "Mumbai", country: "India", type: "city", population: 19980000, lat: 19.0760, lng: 72.8777 },
+  { id: "beijing", name: "Beijing", country: "China", type: "city", population: 19618000, lat: 39.9042, lng: 116.4074 },
+  { id: "dhaka", name: "Dhaka", country: "Bangladesh", type: "city", population: 19578000, lat: 23.8103, lng: 90.4125 },
+  { id: "osaka", name: "Osaka", country: "Japan", type: "city", population: 19281000, lat: 34.6937, lng: 135.5023 },
+  { id: "new_york", name: "New York", country: "United States", type: "city", population: 18819000, lat: 40.7128, lng: -74.0060 },
+  { id: "karachi", name: "Karachi", country: "Pakistan", type: "city", population: 15400000, lat: 24.8607, lng: 67.0011 },
+  { id: "buenos_aires", name: "Buenos Aires", country: "Argentina", type: "city", population: 14967000, lat: -34.6037, lng: -58.3816 },
+  { id: "istanbul", name: "Istanbul", country: "Turkey", type: "city", population: 14751000, lat: 41.0082, lng: 28.9784 },
+  { id: "kolkata", name: "Kolkata", country: "India", type: "city", population: 14681000, lat: 22.5726, lng: 88.3639 },
+  // ... additional cities and POIs
 
-**AsyncStorage Operations**:
-```javascript
-import AsyncStorage from '@react-native-async-storage/async-storage';
-
-// Save city selection
-async function saveCity(city) {
-  await AsyncStorage.multiSet([
-    ['@xray_earth:location_type', 'city'],
-    ['@xray_earth:selected_city', JSON.stringify(city)],
-    ['@xray_earth:last_updated', new Date().toISOString()]
-  ]);
-}
-
-// Save manual coordinates
-async function saveManualCoords(lat, lng) {
-  await AsyncStorage.multiSet([
-    ['@xray_earth:location_type', 'manual'],
-    ['@xray_earth:manual_coords', JSON.stringify({ lat, lng })],
-    ['@xray_earth:last_updated', new Date().toISOString()]
-  ]);
-}
-
-// Load saved location
-async function loadSavedLocation() {
-  const locationType = await AsyncStorage.getItem('@xray_earth:location_type');
-
-  if (locationType === 'city') {
-    const cityData = await AsyncStorage.getItem('@xray_earth:selected_city');
-    return JSON.parse(cityData);
-  } else if (locationType === 'manual') {
-    const coordsData = await AsyncStorage.getItem('@xray_earth:manual_coords');
-    return JSON.parse(coordsData);
-  }
-
-  return null; // Use GPS
-}
-```
-
-**UI Components Required**:
-1. **LocationSettingsModal**: Main modal for location selection
-   - Tab 1: City Search
-   - Tab 2: Manual Entry
-   - Tab 3: Use GPS (current location)
-
-2. **CitySearchList**: Searchable FlatList with 100 cities
-   - Search input at top
-   - Filtered, sorted list items
-   - City name, country, population display
-   - Selection indicator
-
-3. **ManualCoordinateForm**: Coordinate entry form
-   - Latitude TextInput with validation
-   - Longitude TextInput with validation
-   - Validate button
-   - Error/success feedback
-
-4. **LocationIndicator**: Current location display
-   - Shows active location source (GPS/City/Manual)
-   - Tap to open LocationSettingsModal
-   - Display coordinates and city name if applicable
-
-**Top 100 Most Populated Cities** (Sample):
-```javascript
-export const TOP_CITIES = [
-  { id: "tokyo", name: "Tokyo", country: "Japan", population: 37400068, lat: 35.6762, lng: 139.6503 },
-  { id: "delhi", name: "Delhi", country: "India", population: 28514000, lat: 28.7041, lng: 77.1025 },
-  { id: "shanghai", name: "Shanghai", country: "China", population: 25582000, lat: 31.2304, lng: 121.4737 },
-  { id: "sao_paulo", name: "São Paulo", country: "Brazil", population: 21650000, lat: -23.5505, lng: -46.6333 },
-  { id: "mexico_city", name: "Mexico City", country: "Mexico", population: 21581000, lat: 19.4326, lng: -99.1332 },
-  // ... 95 more cities
+  // Notable landmarks/POIs
+  { id: "great_wall", name: "Great Wall", country: "China", type: "landmark", population: null, lat: 40.4319, lng: 116.5704 },
+  { id: "machu_picchu", name: "Machu Picchu", country: "Peru", type: "landmark", population: null, lat: -13.1631, lng: -72.5450 },
+  { id: "grand_canyon", name: "Grand Canyon", country: "United States", type: "natural", population: null, lat: 36.0544, lng: -112.1401 },
+  { id: "mount_everest", name: "Mount Everest", country: "Nepal", type: "natural", population: null, lat: 27.9881, lng: 86.9250 },
+  { id: "eiffel_tower", name: "Eiffel Tower", country: "France", type: "landmark", population: null, lat: 48.8584, lng: 2.2945 },
 ];
 ```
 
-**Search Implementation**:
+#### 5. Visibility Algorithm
+
+**Overview**: The app automatically determines which cities and POIs to display based on the user's location and current view direction. The algorithm prioritizes showing interesting content without cluttering the screen.
+
+**Display Constraints**:
+- Maximum **15 labels visible** at any time to prevent clutter
+- Labels fade in/out smoothly as the view changes
+- Minimum angular separation of **10 degrees** between labels to prevent overlap
+
+**Scoring Algorithm**:
+Each city/POI receives a visibility score based on two main factors:
+
+1. **Horizon Proximity Score** (for nearby cities):
+   - Cities within 500km get high priority
+   - Score = `1 - (distance / 500)` for cities under 500km
+   - These represent "what's on the horizon" when looking sideways
+
+2. **Antipodal Interest Score** (for distant large cities):
+   - Cities on the opposite side of the globe (>10,000km away)
+   - Score weighted by population: `log10(population) / 8`
+   - These represent "what you're looking through the Earth at"
+
+**Combined Scoring Formula**:
 ```javascript
-function searchCities(query, cities) {
-  const lowerQuery = query.toLowerCase().trim();
+function calculateVisibilityScore(poi, userLocation, viewDirection) {
+  const distance = calculateDistance(userLocation, poi);
+  const angularDistance = calculateAngularDistance(viewDirection, poi);
 
-  if (!lowerQuery) return cities;
+  // Base score from distance categories
+  let score = 0;
 
-  return cities
-    .filter(city =>
-      city.name.toLowerCase().includes(lowerQuery) ||
-      city.country.toLowerCase().includes(lowerQuery)
-    )
-    .sort((a, b) => {
-      // Prioritize matches at start of name
-      const aStartsWith = a.name.toLowerCase().startsWith(lowerQuery);
-      const bStartsWith = b.name.toLowerCase().startsWith(lowerQuery);
+  // Horizon cities (close, within 500km)
+  if (distance < 500) {
+    score += (1 - distance / 500) * 50;  // Up to 50 points for proximity
+  }
 
-      if (aStartsWith && !bStartsWith) return -1;
-      if (!aStartsWith && bStartsWith) return 1;
+  // Antipodal cities (far, over 10,000km - "through the Earth")
+  if (distance > 10000) {
+    const antipodeFactor = (distance - 10000) / 10000;  // 0-1 scale
+    const populationFactor = poi.population ? Math.log10(poi.population) / 8 : 0.3;
+    score += antipodeFactor * populationFactor * 100;  // Up to 100 points for large antipodal cities
+  }
 
-      // Then by population
-      return b.population - a.population;
-    });
+  // Boost for being in current view direction (within 60° of center)
+  if (angularDistance < 60) {
+    score *= 1 + (1 - angularDistance / 60);  // Up to 2x multiplier
+  }
+
+  // Penalty for being outside view (behind user)
+  if (angularDistance > 90) {
+    score *= 0.1;
+  }
+
+  return score;
 }
 ```
 
-**Coordinate Validation**:
+**Visibility Selection Process**:
 ```javascript
-function validateCoordinates(lat, lng) {
-  const latitude = parseFloat(lat);
-  const longitude = parseFloat(lng);
+function selectVisiblePOIs(allPOIs, userLocation, viewDirection, maxVisible = 15) {
+  // Score all POIs
+  const scored = allPOIs.map(poi => ({
+    ...poi,
+    score: calculateVisibilityScore(poi, userLocation, viewDirection),
+    distance: calculateDistance(userLocation, poi)
+  }));
 
-  if (isNaN(latitude) || isNaN(longitude)) {
-    return { valid: false, error: 'Coordinates must be numbers' };
+  // Sort by score descending
+  scored.sort((a, b) => b.score - a.score);
+
+  // Select top POIs while respecting minimum angular separation
+  const selected = [];
+  for (const poi of scored) {
+    if (selected.length >= maxVisible) break;
+
+    // Check angular separation from already selected POIs
+    const tooClose = selected.some(s =>
+      calculateAngularSeparation(poi, s) < 10
+    );
+
+    if (!tooClose && poi.score > 0) {
+      selected.push(poi);
+    }
   }
 
-  if (latitude < -90 || latitude > 90) {
-    return { valid: false, error: 'Latitude must be between -90 and 90' };
-  }
-
-  if (longitude < -180 || longitude > 180) {
-    return { valid: false, error: 'Longitude must be between -180 and 180' };
-  }
-
-  return { valid: true, lat: latitude, lng: longitude };
+  return selected;
 }
 ```
 
-**Location Priority Logic**:
-1. Check for saved location in AsyncStorage
-2. If saved location exists, use it
-3. If no saved location, request GPS permission
-4. If GPS granted, use current GPS location
-5. If GPS denied, default to (0, 0) or prompt user to select city
+**Visual Representation**:
+- **Horizon cities** (close): Appear at edge of Earth sphere with subtle glow
+- **Antipodal cities** (far): Appear "through" the translucent Earth, slightly dimmer
+- **Label sizing**: Larger labels for higher-scored POIs
+- **Distance indicator**: Small text showing km from user
 
-#### 5. Landmark System
+#### 6. Landmark System
 - Display major world landmarks as visible points on Earth
 - Render landmarks as 3D spheres slightly outside Earth surface
 - Show landmark names as floating labels (Text sprites or native overlays)
@@ -318,27 +285,21 @@ App.js
 ├── SafeAreaView (handles notches/safe areas)
 ├── StatusBar (hidden or translucent)
 ├── PermissionGate (location/sensor permissions)
-├── LocationSettingsModal (city selection / manual entry / GPS)
-│   ├── CitySearchList (searchable city list)
-│   ├── ManualCoordinateForm (lat/lng entry)
-│   └── Tab Navigation (city/manual/GPS tabs)
 ├── EarthScene (main 3D view)
 │   └── GLView (expo-gl OpenGL surface)
 └── OverlayUI
-    ├── LocationIndicator (current location button - opens modal)
+    ├── POILabels (dynamically positioned city/landmark labels)
     ├── DebugInfo (orientation values, optional)
-    └── Instructions (usage guide)
+    └── Instructions (usage guide - minimal, dismiss on first interaction)
 ```
 
 ### Interaction Model
-- **Primary**: Physical device movement (tilt, rotate, compass)
+- **Primary**: Physical device movement (tilt, rotate, compass) - **this is the only required input**
 - **Touch**:
-  - Tap LocationIndicator to open location settings modal
-  - Tap city from list to select
-  - Tap to dismiss overlays or info panels
-- **Gestures**: Optional pinch-to-zoom for camera control
-- **Text Input**: Manual coordinate entry via keyboard
-- **Haptics**: Subtle feedback when pointing at landmarks or selecting location
+  - Tap to dismiss info panels or instructions
+  - Tap on POI label to see additional details (optional enhancement)
+- **Gestures**: Pinch-to-zoom for camera control
+- **Haptics**: Subtle feedback when pointing at landmarks
 
 ### Performance Requirements
 
@@ -410,29 +371,20 @@ xray-earth/
 │   │   ├── EarthScene.js           # Main 3D scene component
 │   │   ├── PermissionGate.js       # Permission request UI
 │   │   ├── OverlayUI.js            # On-screen info display
-│   │   ├── LandmarkLabel.js        # Individual landmark labels
-│   │   ├── LocationSettingsModal.js # City/manual coord selection modal
-│   │   ├── CitySearchList.js       # Searchable city list
-│   │   ├── ManualCoordinateForm.js # Manual lat/lng entry form
-│   │   └── LocationIndicator.js    # Current location display button
+│   │   └── POILabel.js             # Individual POI/city labels
 │   ├── hooks/
 │   │   ├── useOrientation.js       # Device orientation hook
-│   │   ├── useLocation.js          # GPS & saved location hook
+│   │   ├── useLocation.js          # GPS location hook
 │   │   ├── useThreeScene.js        # Three.js scene management
-│   │   └── useStorage.js           # AsyncStorage operations
+│   │   └── useVisiblePOIs.js       # POI visibility algorithm hook
 │   ├── utils/
 │   │   ├── coordinates.js          # Lat/lng conversions
 │   │   ├── distance.js             # Haversine calculations
 │   │   ├── earthRotation.js        # Rotation math
-│   │   ├── storage.js              # AsyncStorage helpers
-│   │   └── validation.js           # Coordinate validation
+│   │   └── visibility.js           # POI visibility scoring algorithm
 │   ├── constants/
-│   │   ├── landmarks.js            # Landmark data
-│   │   ├── cities.js               # Top 100 cities database
-│   │   ├── storageKeys.js          # AsyncStorage key definitions
+│   │   ├── worldDatabase.js        # 150 cities + POIs database
 │   │   └── config.js               # App configuration
-│   ├── data/
-│   │   └── top100cities.json       # Full city database (optional JSON file)
 │   └── contexts/
 │       └── AppContext.js           # Global state (optional)
 └── assets/
@@ -509,306 +461,76 @@ export function useOrientation() {
 }
 ```
 
-#### LocationSettingsModal.js
+#### useVisiblePOIs.js (Visibility Algorithm Hook)
 ```javascript
-import React, { useState } from 'react';
-import { Modal, View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import CitySearchList from './CitySearchList';
-import ManualCoordinateForm from './ManualCoordinateForm';
+import { useMemo } from 'react';
+import { WORLD_DATABASE } from '../constants/worldDatabase';
+import { calculateDistance, calculateAngularDistance, calculateAngularSeparation } from '../utils/distance';
 
-export default function LocationSettingsModal({ visible, onClose, onLocationSelect }) {
-  const [activeTab, setActiveTab] = useState('city'); // 'city' | 'manual' | 'gps'
+const MAX_VISIBLE = 15;
+const MIN_ANGULAR_SEPARATION = 10; // degrees
 
-  const handleCitySelect = (city) => {
-    onLocationSelect({ type: 'city', data: city });
-    onClose();
-  };
+function calculateVisibilityScore(poi, userLocation, viewDirection) {
+  const distance = calculateDistance(userLocation.lat, userLocation.lng, poi.lat, poi.lng);
+  const angularDistance = calculateAngularDistance(viewDirection, poi);
 
-  const handleManualSubmit = (lat, lng) => {
-    onLocationSelect({ type: 'manual', data: { lat, lng } });
-    onClose();
-  };
+  let score = 0;
 
-  const handleUseGPS = () => {
-    onLocationSelect({ type: 'gps', data: null });
-    onClose();
-  };
+  // Horizon cities (close, within 500km)
+  if (distance < 500) {
+    score += (1 - distance / 500) * 50;
+  }
 
-  return (
-    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
-      <View style={styles.container}>
-        <View style={styles.header}>
-          <Text style={styles.title}>Set Your Location</Text>
-          <TouchableOpacity onPress={onClose}>
-            <Text style={styles.closeButton}>✕</Text>
-          </TouchableOpacity>
-        </View>
+  // Antipodal cities (far, over 10,000km - "through the Earth")
+  if (distance > 10000) {
+    const antipodeFactor = Math.min((distance - 10000) / 10000, 1);
+    const populationFactor = poi.population ? Math.log10(poi.population) / 8 : 0.3;
+    score += antipodeFactor * populationFactor * 100;
+  }
 
-        <View style={styles.tabs}>
-          <TouchableOpacity
-            style={[styles.tab, activeTab === 'city' && styles.activeTab]}
-            onPress={() => setActiveTab('city')}
-          >
-            <Text>Select City</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.tab, activeTab === 'manual' && styles.activeTab]}
-            onPress={() => setActiveTab('manual')}
-          >
-            <Text>Manual Entry</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.tab, activeTab === 'gps' && styles.activeTab]}
-            onPress={() => setActiveTab('gps')}
-          >
-            <Text>Use GPS</Text>
-          </TouchableOpacity>
-        </View>
+  // Boost for being in current view direction (within 60° of center)
+  if (angularDistance < 60) {
+    score *= 1 + (1 - angularDistance / 60);
+  }
 
-        {activeTab === 'city' && (
-          <CitySearchList onSelectCity={handleCitySelect} />
-        )}
+  // Penalty for being outside view (behind user)
+  if (angularDistance > 90) {
+    score *= 0.1;
+  }
 
-        {activeTab === 'manual' && (
-          <ManualCoordinateForm onSubmit={handleManualSubmit} />
-        )}
-
-        {activeTab === 'gps' && (
-          <View style={styles.gpsTab}>
-            <Text style={styles.gpsText}>Use your device's GPS location</Text>
-            <TouchableOpacity style={styles.gpsButton} onPress={handleUseGPS}>
-              <Text style={styles.gpsButtonText}>Use Current Location</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-      </View>
-    </Modal>
-  );
+  return score;
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff' },
-  header: { flexDirection: 'row', justifyContent: 'space-between', padding: 20 },
-  title: { fontSize: 20, fontWeight: 'bold' },
-  closeButton: { fontSize: 24 },
-  tabs: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#ddd' },
-  tab: { flex: 1, padding: 15, alignItems: 'center' },
-  activeTab: { borderBottomWidth: 2, borderBottomColor: '#007AFF' },
-  gpsTab: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
-  gpsText: { fontSize: 16, marginBottom: 20, textAlign: 'center' },
-  gpsButton: { backgroundColor: '#007AFF', padding: 15, borderRadius: 10 },
-  gpsButtonText: { color: '#fff', fontSize: 16, fontWeight: 'bold' }
-});
-```
+export function useVisiblePOIs(userLocation, viewDirection) {
+  return useMemo(() => {
+    if (!userLocation) return [];
 
-#### CitySearchList.js
-```javascript
-import React, { useState, useMemo } from 'react';
-import { View, TextInput, FlatList, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { TOP_CITIES } from '../constants/cities';
+    // Score all POIs
+    const scored = WORLD_DATABASE.map(poi => ({
+      ...poi,
+      score: calculateVisibilityScore(poi, userLocation, viewDirection),
+      distance: calculateDistance(userLocation.lat, userLocation.lng, poi.lat, poi.lng)
+    }));
 
-export default function CitySearchList({ onSelectCity }) {
-  const [searchQuery, setSearchQuery] = useState('');
+    // Sort by score descending
+    scored.sort((a, b) => b.score - a.score);
 
-  const filteredCities = useMemo(() => {
-    if (!searchQuery.trim()) return TOP_CITIES;
+    // Select top POIs while respecting minimum angular separation
+    const selected = [];
+    for (const poi of scored) {
+      if (selected.length >= MAX_VISIBLE) break;
 
-    const lowerQuery = searchQuery.toLowerCase();
-    return TOP_CITIES
-      .filter(city =>
-        city.name.toLowerCase().includes(lowerQuery) ||
-        city.country.toLowerCase().includes(lowerQuery)
-      )
-      .sort((a, b) => {
-        const aStartsWith = a.name.toLowerCase().startsWith(lowerQuery);
-        const bStartsWith = b.name.toLowerCase().startsWith(lowerQuery);
-        if (aStartsWith && !bStartsWith) return -1;
-        if (!aStartsWith && bStartsWith) return 1;
-        return b.population - a.population;
-      });
-  }, [searchQuery]);
+      const tooClose = selected.some(s =>
+        calculateAngularSeparation(poi, s) < MIN_ANGULAR_SEPARATION
+      );
 
-  const renderCity = ({ item }) => (
-    <TouchableOpacity
-      style={styles.cityItem}
-      onPress={() => onSelectCity(item)}
-    >
-      <Text style={styles.cityName}>{item.name}</Text>
-      <Text style={styles.cityCountry}>{item.country}</Text>
-      <Text style={styles.cityCoords}>
-        {item.lat.toFixed(4)}, {item.lng.toFixed(4)}
-      </Text>
-    </TouchableOpacity>
-  );
-
-  return (
-    <View style={styles.container}>
-      <TextInput
-        style={styles.searchInput}
-        placeholder="Search cities..."
-        value={searchQuery}
-        onChangeText={setSearchQuery}
-        autoCapitalize="none"
-      />
-      <FlatList
-        data={filteredCities}
-        renderItem={renderCity}
-        keyExtractor={item => item.id}
-        style={styles.list}
-      />
-    </View>
-  );
-}
-
-const styles = StyleSheet.create({
-  container: { flex: 1 },
-  searchInput: {
-    padding: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: '#ddd',
-    fontSize: 16
-  },
-  list: { flex: 1 },
-  cityItem: { padding: 15, borderBottomWidth: 1, borderBottomColor: '#eee' },
-  cityName: { fontSize: 16, fontWeight: 'bold' },
-  cityCountry: { fontSize: 14, color: '#666', marginTop: 2 },
-  cityCoords: { fontSize: 12, color: '#999', marginTop: 4 }
-});
-```
-
-#### ManualCoordinateForm.js
-```javascript
-import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
-import { validateCoordinates } from '../utils/validation';
-
-export default function ManualCoordinateForm({ onSubmit }) {
-  const [latitude, setLatitude] = useState('');
-  const [longitude, setLongitude] = useState('');
-  const [error, setError] = useState('');
-
-  const handleSubmit = () => {
-    const validation = validateCoordinates(latitude, longitude);
-
-    if (!validation.valid) {
-      setError(validation.error);
-      return;
-    }
-
-    setError('');
-    onSubmit(validation.lat, validation.lng);
-  };
-
-  return (
-    <View style={styles.container}>
-      <Text style={styles.label}>Latitude (-90 to 90)</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="e.g., 40.7128"
-        value={latitude}
-        onChangeText={setLatitude}
-        keyboardType="numeric"
-      />
-
-      <Text style={styles.label}>Longitude (-180 to 180)</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="e.g., -74.0060"
-        value={longitude}
-        onChangeText={setLongitude}
-        keyboardType="numeric"
-      />
-
-      {error ? <Text style={styles.error}>{error}</Text> : null}
-
-      <TouchableOpacity style={styles.button} onPress={handleSubmit}>
-        <Text style={styles.buttonText}>Set Location</Text>
-      </TouchableOpacity>
-    </View>
-  );
-}
-
-const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20 },
-  label: { fontSize: 16, fontWeight: 'bold', marginTop: 15, marginBottom: 5 },
-  input: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    padding: 12,
-    borderRadius: 8,
-    fontSize: 16
-  },
-  error: { color: 'red', marginTop: 10, fontSize: 14 },
-  button: {
-    backgroundColor: '#007AFF',
-    padding: 15,
-    borderRadius: 10,
-    marginTop: 30,
-    alignItems: 'center'
-  },
-  buttonText: { color: '#fff', fontSize: 16, fontWeight: 'bold' }
-});
-```
-
-#### useStorage.js (Custom Hook)
-```javascript
-import { useState, useEffect } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-
-export function useStorage() {
-  const [location, setLocation] = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    loadSavedLocation();
-  }, []);
-
-  const loadSavedLocation = async () => {
-    try {
-      const locationType = await AsyncStorage.getItem('@xray_earth:location_type');
-
-      if (locationType === 'city') {
-        const cityData = await AsyncStorage.getItem('@xray_earth:selected_city');
-        setLocation({ type: 'city', data: JSON.parse(cityData) });
-      } else if (locationType === 'manual') {
-        const coordsData = await AsyncStorage.getItem('@xray_earth:manual_coords');
-        setLocation({ type: 'manual', data: JSON.parse(coordsData) });
-      } else {
-        setLocation({ type: 'gps', data: null });
+      if (!tooClose && poi.score > 0) {
+        selected.push(poi);
       }
-    } catch (error) {
-      console.error('Error loading location:', error);
-      setLocation({ type: 'gps', data: null });
-    } finally {
-      setLoading(false);
     }
-  };
 
-  const saveLocation = async (locationType, data) => {
-    try {
-      if (locationType === 'city') {
-        await AsyncStorage.multiSet([
-          ['@xray_earth:location_type', 'city'],
-          ['@xray_earth:selected_city', JSON.stringify(data)],
-          ['@xray_earth:last_updated', new Date().toISOString()]
-        ]);
-      } else if (locationType === 'manual') {
-        await AsyncStorage.multiSet([
-          ['@xray_earth:location_type', 'manual'],
-          ['@xray_earth:manual_coords', JSON.stringify(data)],
-          ['@xray_earth:last_updated', new Date().toISOString()]
-        ]);
-      } else {
-        await AsyncStorage.setItem('@xray_earth:location_type', 'gps');
-      }
-
-      setLocation({ type: locationType, data });
-    } catch (error) {
-      console.error('Error saving location:', error);
-    }
-  };
-
-  return { location, loading, saveLocation };
+    return selected;
+  }, [userLocation, viewDirection]);
 }
 ```
 
@@ -953,10 +675,10 @@ eas build --platform android --profile production
 ### MVP Launch Requirements
 - ✅ Smooth 60 FPS rendering on iPhone 12+ and Pixel 5+
 - ✅ < 16ms orientation latency
-- ✅ All 10 initial landmarks visible and labeled
-- ✅ City selection with searchable list of 100 cities
-- ✅ Manual coordinate entry with validation
-- ✅ Location preferences persist across app restarts
+- ✅ Built-in database of 150 cities and POIs loads correctly
+- ✅ Visibility algorithm correctly prioritizes horizon and antipodal cities
+- ✅ Maximum 15 labels displayed with proper separation
+- ✅ Automatic GPS location detection works correctly
 - ✅ Permission flows work correctly on iOS and Android
 - ✅ App passes App Store and Play Store review
 - ✅ No crashes during 30-minute continuous use
