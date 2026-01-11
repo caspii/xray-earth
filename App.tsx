@@ -3,6 +3,7 @@ import { StyleSheet, View, Text } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useOrientation } from './src/hooks/useOrientation';
 import { useLocation } from './src/hooks/useLocation';
+import { useVisiblePOIs } from './src/hooks/useVisiblePOIs';
 import { EarthScene } from './src/components/EarthScene';
 
 function radToDeg(rad: number): number {
@@ -12,6 +13,7 @@ function radToDeg(rad: number): number {
 export default function App() {
   const { orientation, available: orientationAvailable } = useOrientation();
   const { location, loading: locationLoading } = useLocation();
+  const visiblePOIs = useVisiblePOIs(location, orientation);
 
   if (orientationAvailable === false) {
     return (
@@ -26,7 +28,7 @@ export default function App() {
       <StatusBar style="light" hidden />
 
       {/* 3D Earth Scene */}
-      <EarthScene orientation={orientation} userLocation={location} />
+      <EarthScene orientation={orientation} userLocation={location} visiblePOIs={visiblePOIs} />
 
       {/* Overlay UI */}
       <View style={styles.overlay}>
@@ -45,6 +47,9 @@ export default function App() {
               {location.lat.toFixed(2)}°, {location.lng.toFixed(2)}°
             </Text>
           )}
+          <Text style={styles.debugText}>
+            POIs: {visiblePOIs.length}
+          </Text>
         </View>
       </View>
     </View>

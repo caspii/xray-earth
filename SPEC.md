@@ -248,12 +248,15 @@ function selectVisiblePOIs(allPOIs, userLocation, viewDirection, maxVisible = 15
 ## User Interface Requirements
 
 ### Visual Design
-- **Background**: Black space-like gradient
-- **Earth**: Semi-transparent blue sphere (opacity: 0.3)
-- **Landmarks**: Bright red/orange glowing spheres
+- **Background/Space**: Dark purple-black (#0a0014) to clearly distinguish from Earth
+- **Earth**: Solid dark blue (#112244) with grid lines
+- **Horizon View**: When phone is held upright in front of user, the horizon should be visible at eye level
+- **Camera Position**: User is positioned on Earth's surface at their GPS location, looking outward
+- **Landmarks**: Colored spheres (yellow=nearby, magenta=antipodal, orange=cities, red=landmarks, green=natural)
+- **User Location**: Cyan marker
 - **Labels**: White text with dark semi-transparent background
 - **UI Elements**: Native iOS/Android design patterns
-- **Status Bar**: Translucent/hidden for immersive experience
+- **Status Bar**: Hidden for immersive experience
 
 ### Component Structure
 ```
