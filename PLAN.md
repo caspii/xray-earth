@@ -205,6 +205,24 @@ This plan breaks down the development of X-ray Earth into incremental milestones
 - Camera responds to device orientation
 - Red markers visible at reference points
 
+### Checkpoint 4 - COMPLETE
+- 150 POIs in database (100 cities + 50 landmarks/natural wonders)
+- Coordinate utilities (distance, angular separation, etc.)
+
+### Checkpoint 5 - COMPLETE
+- All POI markers render on Earth with color coding
+- User location marker (cyan)
+
+### Checkpoint 6 - COMPLETE
+- Visibility algorithm filters to max 15 POIs
+- Prioritizes: nearby horizon cities (yellow), large antipodal cities (magenta)
+- 10° minimum angular separation between markers
+
+### Additional Updates
+- Camera positioned on Earth's surface at user's GPS location
+- Horizon visible when phone held upright
+- Space (dark purple) clearly distinguishable from Earth (dark blue)
+
 ---
 
 ## Quick Reference: Checkpoints Summary

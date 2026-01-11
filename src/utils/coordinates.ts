@@ -123,10 +123,9 @@ export function formatDistance(km: number): string {
     return `${Math.round(km * 1000)} m`;
   } else if (km < 10) {
     return `${km.toFixed(1)} km`;
-  } else if (km < 1000) {
-    return `${Math.round(km)} km`;
   } else {
-    return `${(km / 1000).toFixed(1)}k km`;
+    // Use comma formatting for large numbers
+    return `${Math.round(km).toLocaleString()} km`;
   }
 }
 
