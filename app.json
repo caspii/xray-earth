@@ -1,0 +1,38 @@
+{
+  "expo": {
+    "name": "X-ray Earth",
+    "slug": "xray-earth",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#000000"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.xrayearth.app",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "X-ray Earth needs your location to show your position on the globe.",
+        "NSMotionUsageDescription": "X-ray Earth needs motion access to track your device orientation."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#000000"
+      },
+      "package": "com.xrayearth.app",
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    }
+  }
+}
