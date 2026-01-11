@@ -189,6 +189,24 @@ This plan breaks down the development of X-ray Earth into incremental milestones
 
 ---
 
+## Progress Notes
+
+### Checkpoint 1 - COMPLETE
+- Using Expo SDK 54 (to match Expo Go on device)
+- 3D libraries (expo-gl, expo-three, three) deferred to Phase 3 due to compatibility issues
+- Will need to resolve expo-three + React 19 peer dependency conflicts
+
+### Checkpoint 2 - COMPLETE
+- Orientation tracking working (alpha, beta, gamma)
+- GPS location working with permission flow
+
+### Checkpoint 3 - COMPLETE
+- 3D Earth renders with grid lines
+- Camera responds to device orientation
+- Red markers visible at reference points
+
+---
+
 ## Quick Reference: Checkpoints Summary
 
 | # | Checkpoint | Key Validation |

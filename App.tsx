@@ -1,45 +1,52 @@
-import React, { useEffect, useRef } from 'react';
-import { StyleSheet, Text, View, Animated } from 'react-native';
+import React from 'react';
+import { StyleSheet, View, Text } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
+import { useOrientation } from './src/hooks/useOrientation';
+import { useLocation } from './src/hooks/useLocation';
+import { EarthScene } from './src/components/EarthScene';
+
+function radToDeg(rad: number): number {
+  return (rad * 180) / Math.PI;
+}
 
 export default function App() {
-  const pulseAnim = useRef(new Animated.Value(1)).current;
-  const [timestamp, setTimestamp] = React.useState(new Date().toLocaleTimeString());
+  const { orientation, available: orientationAvailable } = useOrientation();
+  const { location, loading: locationLoading } = useLocation();
 
-  useEffect(() => {
-    // Pulsing animation
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulseAnim, {
-          toValue: 1.2,
-          duration: 1000,
-          useNativeDriver: true,
-        }),
-        Animated.timing(pulseAnim, {
-          toValue: 1,
-          duration: 1000,
-          useNativeDriver: true,
-        }),
-      ])
-    ).start();
-
-    // Update timestamp every second
-    const interval = setInterval(() => {
-      setTimestamp(new Date().toLocaleTimeString());
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, [pulseAnim]);
+  if (orientationAvailable === false) {
+    return (
+      <View style={styles.errorContainer}>
+        <Text style={styles.errorText}>Motion sensors not available</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
-      <StatusBar style="light" />
-      <Animated.Text style={[styles.title, { transform: [{ scale: pulseAnim }] }]}>
-        X-ray Earth
-      </Animated.Text>
-      <Text style={styles.subtitle}>See through the planet</Text>
-      <Text style={styles.timestamp}>{timestamp}</Text>
-      <Text style={styles.status}>Expo Go deployment test</Text>
+      <StatusBar style="light" hidden />
+
+      {/* 3D Earth Scene */}
+      <EarthScene orientation={orientation} userLocation={location} />
+
+      {/* Overlay UI */}
+      <View style={styles.overlay}>
+        <View style={styles.debugPanel}>
+          <Text style={styles.debugText}>
+            Yaw: {radToDeg(orientation.alpha).toFixed(0)}°
+          </Text>
+          <Text style={styles.debugText}>
+            Pitch: {radToDeg(orientation.beta).toFixed(0)}°
+          </Text>
+          <Text style={styles.debugText}>
+            Roll: {radToDeg(orientation.gamma).toFixed(0)}°
+          </Text>
+          {location && !locationLoading && (
+            <Text style={styles.debugText}>
+              {location.lat.toFixed(2)}°, {location.lng.toFixed(2)}°
+            </Text>
+          )}
+        </View>
+      </View>
     </View>
   );
 }
@@ -48,30 +55,35 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#000',
+  },
+  errorContainer: {
+    flex: 1,
+    backgroundColor: '#000',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  title: {
-    fontSize: 36,
-    fontWeight: 'bold',
-    color: '#4488ff',
-    marginBottom: 10,
-  },
-  subtitle: {
+  errorText: {
+    color: '#f66',
     fontSize: 18,
-    color: '#888',
-    marginBottom: 40,
   },
-  timestamp: {
-    fontSize: 24,
-    color: '#fff',
-    fontFamily: 'monospace',
-    marginBottom: 20,
-  },
-  status: {
-    fontSize: 14,
-    color: '#4a4',
+  overlay: {
     position: 'absolute',
-    bottom: 50,
+    top: 50,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+  },
+  debugPanel: {
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    flexDirection: 'row',
+    gap: 12,
+  },
+  debugText: {
+    color: '#fff',
+    fontSize: 12,
+    fontFamily: 'monospace',
   },
 });
