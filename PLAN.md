@@ -222,6 +222,21 @@ This plan breaks down the development of X-ray Earth into incremental milestones
 - Camera positioned on Earth's surface at user's GPS location
 - Horizon visible when phone held upright
 - Space (dark purple) clearly distinguishable from Earth (dark blue)
+- POI labels added with name + distance, color-coded by type
+- 3D-to-2D projection for label positioning
+
+### Bug Fixes Applied
+- **Stickiness algorithm**: POIs that are visible on screen get a +200 score boost to prevent disappearing while user is looking at them (only within 90° of view)
+- **Distance formatting**: Changed from confusing "1.6k km" to proper comma formatting "1,600 km"
+- **Left/right orientation**: Fixed inverted yaw rotation (removed negative sign from alpha)
+- **North/south compass**: Fixed forward direction vector so geographical north displays correctly
+- **Hide current location**: POIs within 20km of user are hidden (prevents seeing "Berlin" when standing in Berlin)
+- **Expanded horizon range**: Increased from 500km to 2,000km to show more nearby cities
+- **Same-country boost**: +40 points for all POIs in user's country (detected from nearest city)
+
+### Database Additions
+- Added 9 German cities: Hamburg, Frankfurt, Cologne, Düsseldorf, Stuttgart, Leipzig, Dresden, Hanover, Nuremberg
+- Total POIs now: 159 (109 cities + 50 landmarks/natural)
 
 ---
 

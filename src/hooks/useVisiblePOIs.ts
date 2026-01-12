@@ -1,4 +1,4 @@
-import { useMemo, useRef } from 'react';
+import { useMemo, useRef, useState, useEffect } from 'react';
 import { WORLD_DATABASE, POI } from '../constants/worldDatabase';
 import { calculateDistance, calculateAngularSeparation } from '../utils/coordinates';
 import { UserLocation } from './useLocation';
@@ -8,9 +8,10 @@ const MAX_VISIBLE = 15;
 const MIN_ANGULAR_SEPARATION = 10; // degrees
 const STICKINESS_BOOST = 200; // Large boost to keep visible POIs from disappearing
 const VIEW_ANGLE_FOR_STICKINESS = 90; // POIs within this angle of view center get stickiness
-const MIN_DISTANCE_KM = 20; // Hide POIs closer than this (user is in this city)
+const MIN_DISTANCE_KM = 50; // Hide POIs closer than this (user is in this city)
 const HORIZON_RANGE_KM = 2000; // Expanded horizon range to show more nearby cities
 const SAME_COUNTRY_BOOST = 40; // Boost for POIs in the same country as the user
+const POI_UPDATE_INTERVAL = 500; // Only recalculate POIs every 500ms
 
 export interface ScoredPOI extends POI {
   score: number;
@@ -143,9 +144,19 @@ export function useVisiblePOIs(
 ): ScoredPOI[] {
   // Track previously selected POI IDs for stickiness
   const previouslySelectedRef = useRef<Set<string>>(new Set());
+  const lastUpdateRef = useRef<number>(0);
+  const [visiblePOIs, setVisiblePOIs] = useState<ScoredPOI[]>([]);
 
-  return useMemo(() => {
-    if (!userLocation) return [];
+  useEffect(() => {
+    if (!userLocation) {
+      setVisiblePOIs([]);
+      return;
+    }
+
+    // Throttle updates to prevent excessive recalculations
+    const now = Date.now();
+    if (now - lastUpdateRef.current < POI_UPDATE_INTERVAL) return;
+    lastUpdateRef.current = now;
 
     const previouslySelectedIds = previouslySelectedRef.current;
     const userCountry = findUserCountry(userLocation);
@@ -189,6 +200,8 @@ export function useVisiblePOIs(
     // Update the previously selected set for next render
     previouslySelectedRef.current = new Set(selected.map(p => p.id));
 
-    return selected;
+    setVisiblePOIs(selected);
   }, [userLocation, orientation]);
+
+  return visiblePOIs;
 }

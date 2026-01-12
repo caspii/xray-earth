@@ -1,12 +1,16 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { StyleSheet, View, Text, Dimensions } from 'react-native';
 import { GLView, ExpoWebGLRenderingContext } from 'expo-gl';
-import { Renderer } from 'expo-three';
+import { Renderer, TextureLoader } from 'expo-three';
 import * as THREE from 'three';
+import { Asset } from 'expo-asset';
 import { Orientation } from '../hooks/useOrientation';
 import { UserLocation } from '../hooks/useLocation';
 import { ScoredPOI } from '../hooks/useVisiblePOIs';
 import { formatDistance } from '../utils/coordinates';
+
+// Earth texture asset
+const earthTextureAsset = Asset.fromModule(require('../../assets/earth-2k.jpg'));
 
 interface EarthSceneProps {
   orientation: Orientation;
@@ -46,7 +50,6 @@ export function EarthScene({ orientation, userLocation, visiblePOIs }: EarthScen
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
   const poiGroupRef = useRef<THREE.Group | null>(null);
-  const userMarkerRef = useRef<THREE.Mesh | null>(null);
   const [labelPositions, setLabelPositions] = useState<LabelPosition[]>([]);
 
   // Update camera position and rotation based on user location and device orientation
@@ -92,31 +95,47 @@ export function EarthScene({ orientation, userLocation, visiblePOIs }: EarthScen
     // Update projection matrix for label positioning
     camera.updateMatrixWorld();
     camera.updateProjectionMatrix();
+  }, [orientation, userLocation]);
 
-    // Project POI positions to screen coordinates
-    const newLabelPositions: LabelPosition[] = visiblePOIs.map(poi => {
-      const pos3D = latLngToVector3(poi.lat, poi.lng, 5.08);
-      const projected = pos3D.clone().project(camera);
+  // Update label positions at 15fps using interval
+  useEffect(() => {
+    const updateLabels = () => {
+      if (!cameraRef.current || visiblePOIs.length === 0) return;
 
-      // Check if in front of camera (z < 1 means in front)
-      const visible = projected.z < 1;
+      const camera = cameraRef.current;
 
-      // Convert from normalized device coords (-1 to 1) to screen pixels
-      const x = (projected.x + 1) / 2 * SCREEN_WIDTH;
-      const y = (1 - projected.y) / 2 * SCREEN_HEIGHT;
+      // Project POI positions to screen coordinates
+      const newLabelPositions: LabelPosition[] = visiblePOIs.map(poi => {
+        const pos3D = latLngToVector3(poi.lat, poi.lng, 5.08);
+        const projected = pos3D.clone().project(camera);
 
-      return {
-        poi,
-        x,
-        y,
-        visible,
-        distance: poi.distance,
-      };
-    });
+        // Check if in front of camera (z < 1 means in front)
+        const visible = projected.z < 1;
 
-    setLabelPositions(newLabelPositions);
+        // Convert from normalized device coords (-1 to 1) to screen pixels
+        const x = (projected.x + 1) / 2 * SCREEN_WIDTH;
+        const y = (1 - projected.y) / 2 * SCREEN_HEIGHT;
 
-  }, [orientation, userLocation, visiblePOIs]);
+        return {
+          poi,
+          x,
+          y,
+          visible,
+          distance: poi.distance,
+        };
+      });
+
+      setLabelPositions(newLabelPositions);
+    };
+
+    // Initial update
+    updateLabels();
+
+    // Update at 15fps
+    const interval = setInterval(updateLabels, 66);
+
+    return () => clearInterval(interval);
+  }, [visiblePOIs]);
 
   // Update visible POIs markers
   useEffect(() => {
@@ -129,6 +148,9 @@ export function EarthScene({ orientation, userLocation, visiblePOIs }: EarthScen
       poiGroup.remove(child);
       if (child instanceof THREE.Mesh) {
         child.geometry.dispose();
+        if (child.material instanceof THREE.Material) {
+          child.material.dispose();
+        }
       }
     }
 
@@ -154,10 +176,38 @@ export function EarthScene({ orientation, userLocation, visiblePOIs }: EarthScen
         size = 0.1;
       }
 
+      const pos = latLngToVector3(poi.lat, poi.lng, 5.08);
+
+      // Outer glow layer (larger, semi-transparent with additive blending)
+      const glowGeometry = new THREE.SphereGeometry(size * 2.5, 12, 12);
+      const glowMaterial = new THREE.MeshBasicMaterial({
+        color,
+        transparent: true,
+        opacity: 0.15,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      });
+      const glow = new THREE.Mesh(glowGeometry, glowMaterial);
+      glow.position.copy(pos);
+      poiGroup.add(glow);
+
+      // Middle glow layer
+      const midGlowGeometry = new THREE.SphereGeometry(size * 1.6, 12, 12);
+      const midGlowMaterial = new THREE.MeshBasicMaterial({
+        color,
+        transparent: true,
+        opacity: 0.3,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      });
+      const midGlow = new THREE.Mesh(midGlowGeometry, midGlowMaterial);
+      midGlow.position.copy(pos);
+      poiGroup.add(midGlow);
+
+      // Core marker (solid center)
       const geometry = new THREE.SphereGeometry(size, 12, 12);
       const material = new THREE.MeshBasicMaterial({ color });
       const marker = new THREE.Mesh(geometry, material);
-      const pos = latLngToVector3(poi.lat, poi.lng, 5.08);
       marker.position.copy(pos);
       poiGroup.add(marker);
     });
@@ -167,27 +217,66 @@ export function EarthScene({ orientation, userLocation, visiblePOIs }: EarthScen
   useEffect(() => {
     if (!sceneRef.current) return;
 
-    if (userMarkerRef.current) {
-      sceneRef.current.remove(userMarkerRef.current);
-      userMarkerRef.current.geometry.dispose();
-      userMarkerRef.current = null;
+    // Clean up previous user marker group
+    const existingGroup = sceneRef.current.getObjectByName('userMarkerGroup');
+    if (existingGroup) {
+      existingGroup.traverse((child) => {
+        if (child instanceof THREE.Mesh) {
+          child.geometry.dispose();
+          if (child.material instanceof THREE.Material) {
+            child.material.dispose();
+          }
+        }
+      });
+      sceneRef.current.remove(existingGroup);
     }
 
     if (userLocation) {
+      const userGroup = new THREE.Group();
+      userGroup.name = 'userMarkerGroup';
+      const pos = latLngToVector3(userLocation.lat, userLocation.lng, 5.12);
+
+      // Outer glow
+      const glowGeometry = new THREE.SphereGeometry(0.45, 16, 16);
+      const glowMaterial = new THREE.MeshBasicMaterial({
+        color: POI_COLORS.user,
+        transparent: true,
+        opacity: 0.15,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      });
+      const glow = new THREE.Mesh(glowGeometry, glowMaterial);
+      glow.position.copy(pos);
+      userGroup.add(glow);
+
+      // Middle glow
+      const midGlowGeometry = new THREE.SphereGeometry(0.3, 16, 16);
+      const midGlowMaterial = new THREE.MeshBasicMaterial({
+        color: POI_COLORS.user,
+        transparent: true,
+        opacity: 0.3,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      });
+      const midGlow = new THREE.Mesh(midGlowGeometry, midGlowMaterial);
+      midGlow.position.copy(pos);
+      userGroup.add(midGlow);
+
+      // Core marker
       const geometry = new THREE.SphereGeometry(0.18, 16, 16);
       const material = new THREE.MeshBasicMaterial({ color: POI_COLORS.user });
       const marker = new THREE.Mesh(geometry, material);
-      const pos = latLngToVector3(userLocation.lat, userLocation.lng, 5.12);
       marker.position.copy(pos);
-      sceneRef.current.add(marker);
-      userMarkerRef.current = marker;
+      userGroup.add(marker);
+
+      sceneRef.current.add(userGroup);
     }
   }, [userLocation]);
 
   const onContextCreate = async (gl: ExpoWebGLRenderingContext) => {
     const renderer = new Renderer({ gl });
     renderer.setSize(gl.drawingBufferWidth, gl.drawingBufferHeight);
-    renderer.setClearColor(0x0a0014, 1);
+    renderer.setClearColor(0x000008, 1);
 
     const scene = new THREE.Scene();
     sceneRef.current = scene;
@@ -202,14 +291,58 @@ export function EarthScene({ orientation, userLocation, visiblePOIs }: EarthScen
     camera.lookAt(0, 0, 0);
     cameraRef.current = camera;
 
-    const earthGeometry = new THREE.SphereGeometry(5, 48, 48);
+    // Create starfield
+    const starCount = 2000;
+    const starPositions = new Float32Array(starCount * 3);
+    const starColors = new Float32Array(starCount * 3);
+
+    for (let i = 0; i < starCount; i++) {
+      // Random position on a large sphere
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.acos(2 * Math.random() - 1);
+      const radius = 80 + Math.random() * 20;
+
+      starPositions[i * 3] = radius * Math.sin(phi) * Math.cos(theta);
+      starPositions[i * 3 + 1] = radius * Math.sin(phi) * Math.sin(theta);
+      starPositions[i * 3 + 2] = radius * Math.cos(phi);
+
+      // Vary star colors slightly (white to blue-white)
+      const brightness = 0.5 + Math.random() * 0.5;
+      starColors[i * 3] = brightness * (0.8 + Math.random() * 0.2);
+      starColors[i * 3 + 1] = brightness * (0.8 + Math.random() * 0.2);
+      starColors[i * 3 + 2] = brightness;
+    }
+
+    const starGeometry = new THREE.BufferGeometry();
+    starGeometry.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
+    starGeometry.setAttribute('color', new THREE.BufferAttribute(starColors, 3));
+
+    const starMaterial = new THREE.PointsMaterial({
+      size: 0.5,
+      vertexColors: true,
+      transparent: true,
+      opacity: 0.9,
+    });
+
+    const stars = new THREE.Points(starGeometry, starMaterial);
+    scene.add(stars);
+
+    // Load Earth texture
+    await earthTextureAsset.downloadAsync();
+    const textureLoader = new TextureLoader();
+    const earthTexture = await textureLoader.loadAsync(earthTextureAsset.localUri || earthTextureAsset.uri);
+
+    const earthGeometry = new THREE.SphereGeometry(5, 64, 64);
     const earthMaterial = new THREE.MeshBasicMaterial({
-      color: 0x112244,
-      transparent: false,
+      map: earthTexture,
+      transparent: true,
+      opacity: 0.4,
+      side: THREE.DoubleSide,
     });
     const earth = new THREE.Mesh(earthGeometry, earthMaterial);
     scene.add(earth);
 
+    // Semi-transparent grid lines overlay
     for (let lat = -60; lat <= 60; lat += 30) {
       scene.add(createLatitudeLine(lat, 5.02));
     }
@@ -279,17 +412,17 @@ function latLngToVector3(lat: number, lng: number, radius: number): THREE.Vector
   );
 }
 
-function createLatitudeLine(lat: number, radius: number, color: number = 0x4488ff): THREE.Line {
+function createLatitudeLine(lat: number, radius: number, color: number = 0x88bbff): THREE.Line {
   const points: THREE.Vector3[] = [];
   for (let lng = 0; lng <= 360; lng += 5) {
     points.push(latLngToVector3(lat, lng, radius));
   }
   const geometry = new THREE.BufferGeometry().setFromPoints(points);
-  const material = new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.6 });
+  const material = new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.3 });
   return new THREE.Line(geometry, material);
 }
 
-function createLongitudeLine(lng: number, radius: number, color: number = 0x4488ff): THREE.Line {
+function createLongitudeLine(lng: number, radius: number, color: number = 0x88bbff): THREE.Line {
   const points: THREE.Vector3[] = [];
   for (let lat = -90; lat <= 90; lat += 5) {
     points.push(latLngToVector3(lat, lng, radius));
@@ -298,7 +431,7 @@ function createLongitudeLine(lng: number, radius: number, color: number = 0x4488
     points.push(latLngToVector3(lat, lng + 180, radius));
   }
   const geometry = new THREE.BufferGeometry().setFromPoints(points);
-  const material = new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.6 });
+  const material = new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.3 });
   return new THREE.Line(geometry, material);
 }
 
