@@ -51,6 +51,7 @@ export function EarthScene({ orientation, userLocation, visiblePOIs }: EarthScen
   const sceneRef = useRef<THREE.Scene | null>(null);
   const poiGroupRef = useRef<THREE.Group | null>(null);
   const [labelPositions, setLabelPositions] = useState<LabelPosition[]>([]);
+  const labelUpdatePending = useRef(false);
 
   // Update camera position and rotation based on user location and device orientation
   useEffect(() => {
@@ -95,47 +96,29 @@ export function EarthScene({ orientation, userLocation, visiblePOIs }: EarthScen
     // Update projection matrix for label positioning
     camera.updateMatrixWorld();
     camera.updateProjectionMatrix();
-  }, [orientation, userLocation]);
 
-  // Update label positions at 15fps using interval
-  useEffect(() => {
-    const updateLabels = () => {
-      if (!cameraRef.current || visiblePOIs.length === 0) return;
+    // Schedule label update on next frame (batched to avoid too many re-renders)
+    if (!labelUpdatePending.current && visiblePOIs.length > 0) {
+      labelUpdatePending.current = true;
+      requestAnimationFrame(() => {
+        if (!cameraRef.current) return;
 
-      const camera = cameraRef.current;
+        const newLabelPositions: LabelPosition[] = visiblePOIs.map(poi => {
+          const pos3D = latLngToVector3(poi.lat, poi.lng, 5.08);
+          const projected = pos3D.clone().project(cameraRef.current!);
 
-      // Project POI positions to screen coordinates
-      const newLabelPositions: LabelPosition[] = visiblePOIs.map(poi => {
-        const pos3D = latLngToVector3(poi.lat, poi.lng, 5.08);
-        const projected = pos3D.clone().project(camera);
+          const visible = projected.z < 1;
+          const x = (projected.x + 1) / 2 * SCREEN_WIDTH;
+          const y = (1 - projected.y) / 2 * SCREEN_HEIGHT;
 
-        // Check if in front of camera (z < 1 means in front)
-        const visible = projected.z < 1;
+          return { poi, x, y, visible, distance: poi.distance };
+        });
 
-        // Convert from normalized device coords (-1 to 1) to screen pixels
-        const x = (projected.x + 1) / 2 * SCREEN_WIDTH;
-        const y = (1 - projected.y) / 2 * SCREEN_HEIGHT;
-
-        return {
-          poi,
-          x,
-          y,
-          visible,
-          distance: poi.distance,
-        };
+        setLabelPositions(newLabelPositions);
+        labelUpdatePending.current = false;
       });
-
-      setLabelPositions(newLabelPositions);
-    };
-
-    // Initial update
-    updateLabels();
-
-    // Update at 15fps
-    const interval = setInterval(updateLabels, 66);
-
-    return () => clearInterval(interval);
-  }, [visiblePOIs]);
+    }
+  }, [orientation, userLocation, visiblePOIs]);
 
   // Update visible POIs markers
   useEffect(() => {
@@ -156,57 +139,41 @@ export function EarthScene({ orientation, userLocation, visiblePOIs }: EarthScen
 
     visiblePOIs.forEach((poi) => {
       let color: number;
-      let size: number;
+      let baseSize: number;
 
       if (poi.isHorizon) {
         color = POI_COLORS.horizon;
-        size = 0.12;
+        baseSize = 0.12;
       } else if (poi.isAntipodal) {
         color = POI_COLORS.antipodal;
-        size = 0.15;
+        baseSize = 0.15;
       } else if (poi.type === 'city') {
         color = POI_COLORS.city;
         const popScale = poi.population ? Math.log10(poi.population) / 8 : 0.5;
-        size = 0.06 + popScale * 0.08;
+        baseSize = 0.06 + popScale * 0.08;
       } else if (poi.type === 'landmark') {
         color = POI_COLORS.landmark;
-        size = 0.1;
+        baseSize = 0.1;
       } else {
         color = POI_COLORS.natural;
-        size = 0.1;
+        baseSize = 0.1;
       }
+
+      // Scale down markers that are close (they appear larger due to perspective)
+      // Close POIs (< 500km) get reduced to 40-100% of base size
+      // Far POIs (> 2000km) stay at full size
+      const distanceFactor = Math.min(1, 0.4 + (poi.distance / 2500) * 0.6);
+      const size = baseSize * distanceFactor;
 
       const pos = latLngToVector3(poi.lat, poi.lng, 5.08);
 
-      // Outer glow layer (larger, semi-transparent with additive blending)
-      const glowGeometry = new THREE.SphereGeometry(size * 2.5, 12, 12);
-      const glowMaterial = new THREE.MeshBasicMaterial({
+      // Simple clean marker with slight transparency
+      const geometry = new THREE.SphereGeometry(size, 16, 16);
+      const material = new THREE.MeshBasicMaterial({
         color,
         transparent: true,
-        opacity: 0.15,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
+        opacity: 0.9,
       });
-      const glow = new THREE.Mesh(glowGeometry, glowMaterial);
-      glow.position.copy(pos);
-      poiGroup.add(glow);
-
-      // Middle glow layer
-      const midGlowGeometry = new THREE.SphereGeometry(size * 1.6, 12, 12);
-      const midGlowMaterial = new THREE.MeshBasicMaterial({
-        color,
-        transparent: true,
-        opacity: 0.3,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
-      });
-      const midGlow = new THREE.Mesh(midGlowGeometry, midGlowMaterial);
-      midGlow.position.copy(pos);
-      poiGroup.add(midGlow);
-
-      // Core marker (solid center)
-      const geometry = new THREE.SphereGeometry(size, 12, 12);
-      const material = new THREE.MeshBasicMaterial({ color });
       const marker = new THREE.Mesh(geometry, material);
       marker.position.copy(pos);
       poiGroup.add(marker);
@@ -217,59 +184,30 @@ export function EarthScene({ orientation, userLocation, visiblePOIs }: EarthScen
   useEffect(() => {
     if (!sceneRef.current) return;
 
-    // Clean up previous user marker group
-    const existingGroup = sceneRef.current.getObjectByName('userMarkerGroup');
-    if (existingGroup) {
-      existingGroup.traverse((child) => {
-        if (child instanceof THREE.Mesh) {
-          child.geometry.dispose();
-          if (child.material instanceof THREE.Material) {
-            child.material.dispose();
-          }
+    // Clean up previous user marker
+    const existingMarker = sceneRef.current.getObjectByName('userMarker');
+    if (existingMarker) {
+      if (existingMarker instanceof THREE.Mesh) {
+        existingMarker.geometry.dispose();
+        if (existingMarker.material instanceof THREE.Material) {
+          existingMarker.material.dispose();
         }
-      });
-      sceneRef.current.remove(existingGroup);
+      }
+      sceneRef.current.remove(existingMarker);
     }
 
     if (userLocation) {
-      const userGroup = new THREE.Group();
-      userGroup.name = 'userMarkerGroup';
       const pos = latLngToVector3(userLocation.lat, userLocation.lng, 5.12);
-
-      // Outer glow
-      const glowGeometry = new THREE.SphereGeometry(0.45, 16, 16);
-      const glowMaterial = new THREE.MeshBasicMaterial({
+      const geometry = new THREE.SphereGeometry(0.08, 16, 16);
+      const material = new THREE.MeshBasicMaterial({
         color: POI_COLORS.user,
         transparent: true,
-        opacity: 0.15,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
+        opacity: 0.9,
       });
-      const glow = new THREE.Mesh(glowGeometry, glowMaterial);
-      glow.position.copy(pos);
-      userGroup.add(glow);
-
-      // Middle glow
-      const midGlowGeometry = new THREE.SphereGeometry(0.3, 16, 16);
-      const midGlowMaterial = new THREE.MeshBasicMaterial({
-        color: POI_COLORS.user,
-        transparent: true,
-        opacity: 0.3,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
-      });
-      const midGlow = new THREE.Mesh(midGlowGeometry, midGlowMaterial);
-      midGlow.position.copy(pos);
-      userGroup.add(midGlow);
-
-      // Core marker
-      const geometry = new THREE.SphereGeometry(0.18, 16, 16);
-      const material = new THREE.MeshBasicMaterial({ color: POI_COLORS.user });
       const marker = new THREE.Mesh(geometry, material);
+      marker.name = 'userMarker';
       marker.position.copy(pos);
-      userGroup.add(marker);
-
-      sceneRef.current.add(userGroup);
+      sceneRef.current.add(marker);
     }
   }, [userLocation]);
 

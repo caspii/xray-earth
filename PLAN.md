@@ -230,9 +230,24 @@ This plan breaks down the development of X-ray Earth into incremental milestones
 - **Distance formatting**: Changed from confusing "1.6k km" to proper comma formatting "1,600 km"
 - **Left/right orientation**: Fixed inverted yaw rotation (removed negative sign from alpha)
 - **North/south compass**: Fixed forward direction vector so geographical north displays correctly
-- **Hide current location**: POIs within 20km of user are hidden (prevents seeing "Berlin" when standing in Berlin)
+- **Hide current location**: POIs within 50km of user are hidden (prevents seeing "Berlin" when standing in Berlin)
 - **Expanded horizon range**: Increased from 500km to 2,000km to show more nearby cities
 - **Same-country boost**: +40 points for all POIs in user's country (detected from nearest city)
+- **Infinite loop fix**: Separated camera updates from label updates, added throttling to POI visibility calculations (500ms interval)
+- **Label jitter fix**: Changed label updates from setInterval to requestAnimationFrame for smooth sync with camera
+
+### Visual Improvements
+- **Earth texture**: NASA Blue Marble texture (2K resolution, 287KB)
+- **Transparent Earth**: 40% opacity so POIs on far side are visible (X-ray effect)
+- **Starfield**: 2,000 procedural stars with varied colors and brightness
+- **Simplified markers**: Clean solid spheres (removed glow effects that didn't render well on mobile)
+- **Distance-based marker sizing**: Close POIs (< 500km) rendered at 40-100% size to compensate for perspective
+- **Grid lines**: More subtle (30% opacity, lighter blue) to not obscure Earth texture
+
+### Performance Optimizations
+- **POI visibility throttling**: Recalculates every 500ms instead of every frame
+- **Label updates**: Uses requestAnimationFrame with pending flag to batch updates
+- **Reduced draw calls**: Single sphere per POI instead of 3 (removed glow layers)
 
 ### Database Additions
 - Added 9 German cities: Hamburg, Frankfurt, Cologne, Düsseldorf, Stuttgart, Leipzig, Dresden, Hanover, Nuremberg
